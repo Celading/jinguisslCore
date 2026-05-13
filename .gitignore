@@ -1,0 +1,5 @@
+target/
+AGENTS.md
+_helper/
+.atomcode/
+.DS_Store
