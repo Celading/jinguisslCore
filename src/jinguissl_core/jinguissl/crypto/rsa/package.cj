@@ -1,3 +1,3 @@
 package jinguissl_core.jinguissl.crypto.rsa
 
-internal let _coreRsaPackageMarker: Int64 = 0
+internal let _CORE_RSA_PACKAGE_MARKER: Int64 = 0

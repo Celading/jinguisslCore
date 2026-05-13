@@ -1,3 +1,3 @@
 package jinguissl_core.jinguissl.crypto.utils
 
-internal let _coreUtilsPackageMarker: Int64 = 0
+internal let _CORE_UTILS_PACKAGE_MARKER: Int64 = 0
