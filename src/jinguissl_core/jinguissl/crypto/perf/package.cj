@@ -1,3 +1,3 @@
 package jinguissl_core.jinguissl.crypto.perf
 
-internal let _corePerfPackageMarker: Int64 = 0
+internal let _CORE_PERF_PACKAGE_MARKER: Int64 = 0

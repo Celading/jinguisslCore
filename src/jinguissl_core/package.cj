@@ -1,3 +1,3 @@
 package jinguissl_core
 
-internal let _coreRootPackageMarker: Int64 = 0
+internal let _CORE_ROOT_PACKAGE_MARKER: Int64 = 0

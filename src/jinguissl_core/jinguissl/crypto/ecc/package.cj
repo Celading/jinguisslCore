@@ -1,3 +1,3 @@
 package jinguissl_core.jinguissl.crypto.ecc
 
-internal let _coreEccPackageMarker: Int64 = 0
+internal let _CORE_ECC_PACKAGE_MARKER: Int64 = 0

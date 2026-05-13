@@ -1,3 +1,3 @@
 package jinguissl_core.jinguissl.crypto.bignum
 
-internal let _coreBignumPackageMarker: Int64 = 0
+internal let _CORE_BIGNUM_PACKAGE_MARKER: Int64 = 0
