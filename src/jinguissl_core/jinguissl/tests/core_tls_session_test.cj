@@ -1,7 +1,6 @@
 package jinguissl_core.jinguissl.tests
 
 import jinguissl_core.jinguissl.crypto.tls.*
-import jinguissl_core.jinguissl.crypto.compliance.*
 
 @Test
 public class TlsSessionTestSuite {

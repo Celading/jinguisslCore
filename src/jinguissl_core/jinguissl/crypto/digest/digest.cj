@@ -2,7 +2,7 @@ package jinguissl_core.jinguissl.crypto.digest
 
 import std.collection.ArrayList
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
-import jinguissl_core.jinguissl.crypto.utils.*
+import jinguissl_core.jinguissl.crypto.utils.{bytesToUInt32BE, bytesToUInt32LE, secureCopyInto, uInt32ToBytesBE, uInt32ToBytesLE}
 
 public enum HashAlgorithm <: Equatable<HashAlgorithm> & ToString {
     | MD5

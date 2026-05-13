@@ -3,11 +3,11 @@ package jinguissl_core.jinguissl.tests
 import std.collection.ArrayList
 import std.fs.*
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
-import jinguissl_core.jinguissl.crypto.digest.{sha1, sha256, sha384, sha512}
+import jinguissl_core.jinguissl.crypto.digest.*
 import jinguissl_core.jinguissl.crypto.ed25519.{ed25519PublicKeyFromSeed, ed25519Sign}
 import jinguissl_core.jinguissl.crypto.ecc.*
 import jinguissl_core.jinguissl.crypto.error.CryptoException
-import jinguissl_core.jinguissl.crypto.rsa.{RsaHashAlgorithm, RsaPrivateKey, RsaPublicKey, rsaPrivateKeyFromHex, rsaSignPkcs1v15WithHash}
+import jinguissl_core.jinguissl.crypto.rsa.*
 import jinguissl_core.jinguissl.crypto.ssh.*
 
 @Test

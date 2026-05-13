@@ -3,7 +3,7 @@ package jinguissl_core.jinguissl.crypto.kem
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.compliance.FipsProfile
 import jinguissl_core.jinguissl.crypto.digest.{hmac, HashAlgorithm}
-import jinguissl_core.jinguissl.crypto.ecc.*
+import jinguissl_core.jinguissl.crypto.ecc.{NamedCurve, EcPrivateKey, EcPublicKey, ecdhDeriveSharedSecret}
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.rsa.{RsaPrivateKey, RsaPublicKey}
 import jinguissl_core.jinguissl.crypto.utils.{randomSeed, secureCopyInto}

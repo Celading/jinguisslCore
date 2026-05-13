@@ -1,7 +1,7 @@
 package jinguissl_core.jinguissl.crypto.tls
 
 import std.collection.ArrayList
-import jinguissl_core.jinguissl.crypto.compliance.*
+import jinguissl_core.jinguissl.crypto.compliance.{TlsVersion}
 import jinguissl_core.jinguissl.crypto.digest.bytesToHexLower
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 

@@ -1,6 +1,5 @@
 package jinguissl_core.jinguissl.tests
 
-import jinguissl_core.jinguissl.crypto.compliance.*
 import jinguissl_core.jinguissl.crypto.error.CryptoException
 import jinguissl_core.jinguissl.crypto.tls.*
 

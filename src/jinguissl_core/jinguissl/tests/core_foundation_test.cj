@@ -1,7 +1,7 @@
 package jinguissl_core.jinguissl.tests
 
 import jinguissl_core.jinguissl.crypto.base as corebase
-import jinguissl_core.jinguissl.crypto.error.{CryptoErrorCode, CryptoException}
+import jinguissl_core.jinguissl.crypto.error.*
 import jinguissl_core.jinguissl.crypto.utils.*
 
 @Test
