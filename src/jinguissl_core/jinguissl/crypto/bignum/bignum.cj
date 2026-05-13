@@ -75,7 +75,12 @@ public class BigNum <: Equatable<BigNum> & ToString {
         _value
     }
 
-    public func toBytesBE(paddedLen!: Int64 = -1): Array<Byte> {
+    /**
+ * toBytesBE.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func toBytesBE(paddedLen!: Int64 = -1): Array<Byte> {
         var raw = trimLeadingZeroBytes(abs(_value).toBytes())
         if (raw.size == 0) {
             raw = [0]
@@ -130,7 +135,12 @@ public class BigNum <: Equatable<BigNum> & ToString {
         BigNum(_value * other._value)
     }
 
-    public func divMod(other: BigNum): (BigNum, BigNum) {
+    /**
+ * divMod.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func divMod(other: BigNum): (BigNum, BigNum) {
         if (other._value.sign == 0) {
             throw CryptoException(DivideByZero, "divide by zero")
         }
@@ -138,7 +148,12 @@ public class BigNum <: Equatable<BigNum> & ToString {
         (BigNum(q), BigNum(r))
     }
 
-    public func mod(other: BigNum): BigNum {
+    /**
+ * mod.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func mod(other: BigNum): BigNum {
         let m = abs(other._value)
         if (m.sign == 0) {
             throw CryptoException(DivideByZero, "mod by zero")
@@ -146,7 +161,12 @@ public class BigNum <: Equatable<BigNum> & ToString {
         BigNum(normalizeMod(_value, m))
     }
 
-    public func exp(exponent: BigNum): BigNum {
+    /**
+ * exp.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func exp(exponent: BigNum): BigNum {
         if (exponent._value.sign < 0) {
             throw CryptoException(InvalidArgument, "negative exponent is not supported")
         }
@@ -168,7 +188,12 @@ public class BigNum <: Equatable<BigNum> & ToString {
         BigNum(result)
     }
 
-    public func modExp(exponent: BigNum, modulus: BigNum): BigNum {
+    /**
+ * modExp.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func modExp(exponent: BigNum, modulus: BigNum): BigNum {
         let m = abs(modulus._value)
         if (m.sign == 0) {
             throw CryptoException(DivideByZero, "modulus must not be zero")
@@ -186,7 +211,12 @@ public class BigNum <: Equatable<BigNum> & ToString {
         BigNum(normalizeMod(result, m))
     }
 
-    public func modInverse(modulus: BigNum): BigNum {
+    /**
+ * modInverse.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func modInverse(modulus: BigNum): BigNum {
         let m = abs(modulus._value)
         if (m.sign == 0) {
             throw CryptoException(DivideByZero, "modulus must not be zero")
@@ -199,14 +229,24 @@ public class BigNum <: Equatable<BigNum> & ToString {
         }
     }
 
-    public func lshift(bits: Int64): BigNum {
+    /**
+ * lshift.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func lshift(bits: Int64): BigNum {
         if (bits < 0) {
             throw CryptoException(InvalidArgument, "shift bits must be >= 0")
         }
         BigNum(_value << bits)
     }
 
-    public func rshift(bits: Int64): BigNum {
+    /**
+ * rshift.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func rshift(bits: Int64): BigNum {
         if (bits < 0) {
             throw CryptoException(InvalidArgument, "shift bits must be >= 0")
         }

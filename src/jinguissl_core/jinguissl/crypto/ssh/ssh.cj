@@ -425,7 +425,12 @@ public class SshClientInitialHandshakeResult {
         this.hostVerification = hostVerification
     }
 
-    public func requireHostVerification(): SshHostVerificationResult {
+    /**
+ * requireHostVerification.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func requireHostVerification(): SshHostVerificationResult {
         match (hostVerification) {
             case Some(value) => value
             case None =>
@@ -618,7 +623,12 @@ public class SshHandshakeStateMachine {
         _phase = SshHandshakePhase.KexInit
     }
 
-    public func ensureActive(): Unit {
+    /**
+ * ensureActive.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func ensureActive(): Unit {
         if (_phase != SshHandshakePhase.Active) {
             throw CryptoException(ParseError, "SSH transport is not active yet")
         }
@@ -777,7 +787,12 @@ public class SshHandshakeCoordinator {
         )
     }
 
-    public func acceptNewKeys(from: SshPeerRole, encodedNewKeys: Array<Byte>): Bool {
+    /**
+ * acceptNewKeys.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func acceptNewKeys(from: SshPeerRole, encodedNewKeys: Array<Byte>): Bool {
         requireHandshakePhase(stateMachine.phase, SshHandshakePhase.NewKeys, "accept NEWKEYS")
         sshDecodeNewKeys(encodedNewKeys)
         if (from == SshPeerRole.Client) {
@@ -809,14 +824,24 @@ public class SshHandshakeCoordinator {
         true
     }
 
-    public func sessionId(): Array<Byte> {
+    /**
+ * sessionId.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func sessionId(): Array<Byte> {
         if (_resolvedSessionId.size == 0) {
             throw CryptoException(ParseError, "SSH session_id is not resolved yet")
         }
         _resolvedSessionId.clone()
     }
 
-    public func derivedKeys(): SshDerivedSessionKeys {
+    /**
+ * derivedKeys.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func derivedKeys(): SshDerivedSessionKeys {
         match (_derivedKeys) {
             case Some(value) => value
             case None =>
@@ -824,7 +849,12 @@ public class SshHandshakeCoordinator {
         }
     }
 
-    public func hostVerification(): SshHostVerificationResult {
+    /**
+ * hostVerification.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func hostVerification(): SshHostVerificationResult {
         match (_hostVerification) {
             case Some(value) => value
             case None =>
@@ -932,7 +962,12 @@ private class SshPacketCipherState {
         _counter = material.iv.clone()
     }
 
-    public func seal(payload: Array<Byte>, randomPadding!: Array<Byte> = []): Array<Byte> {
+    /**
+ * seal.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func seal(payload: Array<Byte>, randomPadding!: Array<Byte> = []): Array<Byte> {
         let packet = sshEncodeTransportPacket(payload, blockSize: _blockSize, randomPadding: randomPadding)
         if (_aeadTagLen != 0) {
             _aeadNonceScratch = sshEnsureScratchSize(_aeadNonceScratch, _counter.size)
@@ -979,7 +1014,12 @@ private class SshPacketCipherState {
         concatBytes(encryptedPacket, mac)
     }
 
-    public func open(encodedPacket: Array<Byte>): SshTransportPacket {
+    /**
+ * open.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func open(encodedPacket: Array<Byte>): SshTransportPacket {
         if (_aeadTagLen != 0) {
             if (encodedPacket.size < 4 + 1 + SSH_MIN_PACKET_PADDING_LEN + _aeadTagLen) {
                 throw CryptoException(ParseError, "SSH protected packet is too short")
@@ -1060,6 +1100,11 @@ public func sshBuildVersionBanner(softwareVersion: String, comments!: String = "
     SshVersionBanner(SSH_PROTOCOL_VERSION_2_0, softwareVersion, comments: comments)
 }
 
+/**
+ * sshEncodeVersionBanner.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshEncodeVersionBanner(banner: SshVersionBanner): Array<Byte> {
     let line = banner.lineText()
     if (line.size > SSH_MAX_IDENTIFICATION_LEN) {
@@ -1068,6 +1113,11 @@ public func sshEncodeVersionBanner(banner: SshVersionBanner): Array<Byte> {
     line.toArray()
 }
 
+/**
+ * sshDecodeVersionBanner.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshDecodeVersionBanner(encodedLine: Array<Byte>): SshVersionBanner {
     if (encodedLine.size == 0 || encodedLine.size > SSH_MAX_IDENTIFICATION_LEN) {
         throw CryptoException(ParseError, "SSH version identification line length is invalid")
@@ -1189,6 +1239,11 @@ public func sshEncodeKexEcdhInit(message: SshKexEcdhInitMessage): Array<Byte> {
     out.toArray()
 }
 
+/**
+ * sshDecodeKexEcdhInit.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshDecodeKexEcdhInit(encoded: Array<Byte>): SshKexEcdhInitMessage {
     if (encoded.size < 1 + 4 + X25519_KEY_LEN) {
         throw CryptoException(ParseError, "SSH_MSG_KEX_ECDH_INIT payload is too short")
@@ -1212,6 +1267,11 @@ public func sshEncodeKexEcdhReply(message: SshKexEcdhReplyMessage): Array<Byte> 
     out.toArray()
 }
 
+/**
+ * sshDecodeKexEcdhReply.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshDecodeKexEcdhReply(encoded: Array<Byte>): SshKexEcdhReplyMessage {
     if (encoded.size < 1 + 12) {
         throw CryptoException(ParseError, "SSH_MSG_KEX_ECDH_REPLY payload is too short")
@@ -1236,6 +1296,11 @@ public func sshEncodeNewKeys(): Array<Byte> {
     [UInt8(SSH_MSG_NEWKEYS)]
 }
 
+/**
+ * sshDecodeNewKeys.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshDecodeNewKeys(encoded: Array<Byte>): Unit {
     if (encoded.size != 1) {
         throw CryptoException(ParseError, "SSH_MSG_NEWKEYS payload length is invalid")
@@ -1265,6 +1330,11 @@ public func sshIsMacSupported(macName: String): Bool {
     }
 }
 
+/**
+ * sshResolveSessionId.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshResolveSessionId(
     exchangeHash: Array<Byte>,
     existingSessionId!: Array<Byte> = []
@@ -1281,6 +1351,11 @@ public func sshResolveSessionId(
     existingSessionId.clone()
 }
 
+/**
+ * sshDeriveSessionKeysSha256.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshDeriveSessionKeysSha256(
     sharedSecret: Array<Byte>,
     exchangeHash: Array<Byte>,
@@ -1948,6 +2023,11 @@ public func sshServerProcessKexEcdhInitX25519(
     )
 }
 
+/**
+ * sshClientProcessKexEcdhReplyX25519.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshClientProcessKexEcdhReplyX25519(
     transcript: SshKexExchangeTranscript,
     clientPrivateKey: Array<Byte>,
@@ -1997,6 +2077,11 @@ public func sshClientProcessKexEcdhReplyX25519Verified(
     result
 }
 
+/**
+ * sshComputeHostKeySha256.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshComputeHostKeySha256(serverHostKey: Array<Byte>): Array<Byte> {
     if (serverHostKey.size == 0) {
         throw CryptoException(InvalidArgument, "SSH host key blob must not be empty")
@@ -2004,6 +2089,11 @@ public func sshComputeHostKeySha256(serverHostKey: Array<Byte>): Array<Byte> {
     sha256(serverHostKey)
 }
 
+/**
+ * sshRequireVerifiedHostIdentity.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshRequireVerifiedHostIdentity(
     kexResult: SshX25519KexResult,
     policy!: SshHostVerificationPolicy = SshHostVerificationPolicy()
@@ -2040,6 +2130,11 @@ public func sshRequireVerifiedHostIdentity(
     )
 }
 
+/**
+ * sshVerifyHostIdentityWithRequirement.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshVerifyHostIdentityWithRequirement(
     kexResult: SshX25519KexResult,
     policy!: SshHostVerificationPolicy = SshHostVerificationPolicy(),
@@ -2113,6 +2208,11 @@ public func sshEncodeRsaHostPublicKey(publicKey: RsaPublicKey): Array<Byte> {
     out.toArray()
 }
 
+/**
+ * sshEncodeRsaHostSignature.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshEncodeRsaHostSignature(signatureAlgorithm: String, signature: Array<Byte>): Array<Byte> {
     let normalized = sshNormalizeRsaHostSignatureAlgorithm(signatureAlgorithm)
     if (signature.size == 0) {
@@ -2125,6 +2225,11 @@ public func sshEncodeRsaHostSignature(signatureAlgorithm: String, signature: Arr
     out.toArray()
 }
 
+/**
+ * sshSignExchangeHashRsa.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshSignExchangeHashRsa(
     privateKey: RsaPrivateKey,
     exchangeHash: Array<Byte>,
@@ -2174,6 +2279,11 @@ public func sshEncodeEcdsaHostSignature(curve: NamedCurve, r: BigNum, s: BigNum)
     out.toArray()
 }
 
+/**
+ * sshSignExchangeHashEcdsa.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshSignExchangeHashEcdsa(privateKey: EcPrivateKey, exchangeHash: Array<Byte>): Array<Byte> {
     if (exchangeHash.size == 0) {
         throw CryptoException(InvalidArgument, "SSH exchange hash must not be empty")
@@ -2189,6 +2299,11 @@ public func sshSignExchangeHashEcdsa(privateKey: EcPrivateKey, exchangeHash: Arr
     sshEncodeEcdsaHostSignature(privateKey.curve, r, s)
 }
 
+/**
+ * sshEncodeEd25519HostPublicKey.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshEncodeEd25519HostPublicKey(publicKey: Array<Byte>): Array<Byte> {
     if (publicKey.size != ED25519_PUBLIC_KEY_LEN) {
         throw CryptoException(InvalidArgument, "SSH ed25519 host public key must be 32 bytes")
@@ -2204,6 +2319,11 @@ public func sshBuildEd25519HostKeyBlobFromSeed(privateKeySeed: Array<Byte>): Arr
     sshEncodeEd25519HostPublicKey(ed25519PublicKeyFromSeed(privateKeySeed))
 }
 
+/**
+ * sshEncodeEd25519HostSignature.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshEncodeEd25519HostSignature(signature: Array<Byte>): Array<Byte> {
     if (signature.size != ED25519_SIGNATURE_LEN) {
         throw CryptoException(InvalidArgument, "SSH ed25519 host signature must be 64 bytes")
@@ -2215,6 +2335,11 @@ public func sshEncodeEd25519HostSignature(signature: Array<Byte>): Array<Byte> {
     out.toArray()
 }
 
+/**
+ * sshSignExchangeHashEd25519.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshSignExchangeHashEd25519(privateKeySeed: Array<Byte>, exchangeHash: Array<Byte>): Array<Byte> {
     if (exchangeHash.size == 0) {
         throw CryptoException(InvalidArgument, "SSH exchange hash must not be empty")
@@ -2222,6 +2347,11 @@ public func sshSignExchangeHashEd25519(privateKeySeed: Array<Byte>, exchangeHash
     sshEncodeEd25519HostSignature(ed25519Sign(privateKeySeed, exchangeHash))
 }
 
+/**
+ * sshVerifyServerHostSignature.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshVerifyServerHostSignature(
     exchangeHash: Array<Byte>,
     serverHostKey: Array<Byte>,
@@ -2299,6 +2429,11 @@ public func sshVerifyServerHostSignature(
     throw CryptoException(Unsupported, "SSH host signature algorithm is unsupported: ${signatureAlgorithm}")
 }
 
+/**
+ * sshComputeExchangeHashSha256.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshComputeExchangeHashSha256(
     transcript: SshKexExchangeTranscript,
     serverHostKey: Array<Byte>,
@@ -2348,6 +2483,11 @@ public func sshEncodeKexInit(message: SshKexInitMessage): Array<Byte> {
     out.toArray()
 }
 
+/**
+ * sshDecodeKexInit.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshDecodeKexInit(encoded: Array<Byte>): SshKexInitMessage {
     if (encoded.size < 62) {
         throw CryptoException(ParseError, "SSH KEXINIT payload is too short")
@@ -2450,6 +2590,11 @@ public func sshNegotiateKexInit(client: SshKexInitMessage, server: SshKexInitMes
     SshNegotiatedAlgorithms(kexAlgorithm, hostKeyAlgorithm, encC2s, encS2c, macC2s, macS2c, compC2s, compS2c)
 }
 
+/**
+ * sshEncodeTransportPacket.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshEncodeTransportPacket(
     payload: Array<Byte>,
     blockSize!: Int64 = SSH_DEFAULT_PACKET_BLOCK_SIZE,
@@ -2490,6 +2635,11 @@ public func sshEncodeTransportPacket(
     encoded
 }
 
+/**
+ * sshDecodeTransportPacket.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func sshDecodeTransportPacket(
     encoded: Array<Byte>,
     blockSize!: Int64 = SSH_DEFAULT_PACKET_BLOCK_SIZE

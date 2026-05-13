@@ -36,6 +36,11 @@ public func rsaKemEncapsulate(
     (ciphertext, sharedSecret)
 }
 
+/**
+ * rsaKemDecapsulate.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func rsaKemDecapsulate(
     privateKey: RsaPrivateKey,
     ciphertext: Array<Byte>,
@@ -58,6 +63,11 @@ public func rsaKemDecapsulate(
     hkdfSha256(ikm, appendContext("RSA-KEM", info), sharedSecretLen)
 }
 
+/**
+ * ecdhKemEncapsulate.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func ecdhKemEncapsulate(
     peerPublicKey: EcPublicKey,
     sharedSecretLen!: Int64 = 32,
@@ -77,6 +87,11 @@ public func ecdhKemEncapsulate(
     (encapsulatedKey, sharedSecret)
 }
 
+/**
+ * ecdhKemDecapsulate.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func ecdhKemDecapsulate(
     privateKey: EcPrivateKey,
     encapsulatedKey: Array<Byte>,

@@ -138,6 +138,11 @@ public class TlsConnectionPoolStats {
     }
 }
 
+/**
+ * tlsCreateSessionTicket.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsCreateSessionTicket(
     identity: TlsSessionIdentity,
     secret: Array<Byte>,
@@ -202,6 +207,11 @@ public func tlsEncodeSessionTicket(ticket: TlsSessionTicket): Array<Byte> {
     out
 }
 
+/**
+ * tlsDecodeSessionTicket.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeSessionTicket(encoded: Array<Byte>): TlsSessionTicket {
     if (encoded.size < 37) {
         throw CryptoException(ParseError, "TLS session ticket is too short")

@@ -63,6 +63,11 @@ public func chacha20Xor(
     chacha20XorWithContext(context, nonce, input, initialCounter: initialCounter)
 }
 
+/**
+ * chacha20XorWithContext.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func chacha20XorWithContext(
     context: Chacha20Poly1305Context,
     nonce: Array<Byte>,
@@ -194,6 +199,11 @@ public func chacha20Poly1305Decrypt(
     chacha20Poly1305DecryptWithContext(context, nonce, ciphertext, tag, aad: aad)
 }
 
+/**
+ * chacha20Poly1305DecryptWithContext.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func chacha20Poly1305DecryptWithContext(
     context: Chacha20Poly1305Context,
     nonce: Array<Byte>,

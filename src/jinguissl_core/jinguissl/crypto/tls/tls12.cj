@@ -155,6 +155,11 @@ public func tls12BuildCertificateHandshakeFromDerChain(certChainDer: Array<Array
     tlsEncodeCertificateHandshakeTls12(certChainDer)
 }
 
+/**
+ * tls12ParseCertificateChainFromHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls12ParseCertificateChainFromHandshake(encodedCertificate: Array<Byte>): Array<X509Certificate> {
     let certDerChain = tlsDecodeCertificateHandshakeTls12(encodedCertificate)
     if (certDerChain.size == 0) {
@@ -211,6 +216,11 @@ public func tls12BuildRsaClientKeyExchange(
     (encoded, preMaster)
 }
 
+/**
+ * tls12ProcessRsaClientKeyExchange.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls12ProcessRsaClientKeyExchange(
     serverPrivateKey: RsaPrivateKey,
     encodedClientKeyExchange: Array<Byte>
@@ -237,6 +247,11 @@ public func tls12BuildEcdheServerKeyExchange(serverPublicKey: EcPublicKey): Arra
     tlsEncodeServerKeyExchangeHandshake(TlsKeyExchangeMessage(body))
 }
 
+/**
+ * tls12ParseEcdheServerKeyExchange.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls12ParseEcdheServerKeyExchange(encodedServerKeyExchange: Array<Byte>): EcPublicKey {
     let message = tlsDecodeServerKeyExchangeHandshake(encodedServerKeyExchange)
     if (message.exchangeData.size < 4) {
@@ -269,6 +284,11 @@ public func tls12BuildEcdheClientKeyExchange(clientPublicKey: EcPublicKey): Arra
     tlsEncodeClientKeyExchangeHandshake(TlsKeyExchangeMessage(body))
 }
 
+/**
+ * tls12ParseEcdheClientKeyExchange.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls12ParseEcdheClientKeyExchange(encodedClientKeyExchange: Array<Byte>): EcPublicKey {
     let message = tlsDecodeClientKeyExchangeHandshake(encodedClientKeyExchange)
     if (message.exchangeData.size < 2) {
@@ -286,6 +306,11 @@ public func tls12ParseEcdheClientKeyExchange(encodedClientKeyExchange: Array<Byt
     tls12DecodeUncompressedPoint(message.exchangeData[1..], namedCurve, fieldBytes)
 }
 
+/**
+ * tls12DeriveSecretsFromPreMaster.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls12DeriveSecretsFromPreMaster(
     preMasterSecret: Array<Byte>,
     clientRandom: Array<Byte>,
@@ -391,6 +416,11 @@ public func tls12CreateServerRecordLayerChacha20Poly1305(
     )
 }
 
+/**
+ * tls12PrfSha256.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls12PrfSha256(secret: Array<Byte>, label: String, seed: Array<Byte>, outputLen: Int64): Array<Byte> {
     if (secret.size == 0) {
         throw CryptoException(InvalidArgument, "TLS12 PRF secret must not be empty")

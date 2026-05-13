@@ -124,6 +124,11 @@ public func rsaRequireAllowed(profile: FipsProfile): Unit {
     profile.requireAllowed("RSA")
 }
 
+/**
+ * rsaValidateKeyParameters.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func rsaValidateKeyParameters(bits: Int64, publicExponent: BigNum): Unit {
     if (bits != 2048 && bits != 4096) {
         throw CryptoException(ComplianceRejected, "RSA key size must be 2048 or 4096 bits in stage3 profile")
@@ -131,6 +136,11 @@ public func rsaValidateKeyParameters(bits: Int64, publicExponent: BigNum): Unit 
     validatePublicExponent(publicExponent)
 }
 
+/**
+ * rsaGenerateKey.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func rsaGenerateKey(
     bits: Int64,
     publicExponent!: BigNum = BigNum.fromHex("010001")

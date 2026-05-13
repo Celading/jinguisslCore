@@ -371,6 +371,11 @@ public class X509AuthorityKeyIdentifier {
     }
 }
 
+/**
+ * x509ParseDer.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ParseDer(der: Array<Byte>): X509Certificate {
     let certElem = derReadSingleElement(der, "X509 certificate")
     if (certElem.tag != DER_TAG_SEQUENCE) {
@@ -441,6 +446,11 @@ public func x509ParseDer(der: Array<Byte>): X509Certificate {
     )
 }
 
+/**
+ * x509ParsePem.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ParsePem(pem: String): X509Certificate {
     let certs = x509ParsePemChain(pem)
     if (certs.size != 1) {
@@ -449,6 +459,11 @@ public func x509ParsePem(pem: String): X509Certificate {
     certs[0]
 }
 
+/**
+ * x509ParsePemChain.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ParsePemChain(pemBundle: String): Array<X509Certificate> {
     let normalized = pemBundle.replace("\r", "\n")
     let lines = normalized.split('\n')
@@ -491,6 +506,11 @@ public func x509ParsePemChain(pemBundle: String): Array<X509Certificate> {
     certs.toArray()
 }
 
+/**
+ * x509ParseCrlDer.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ParseCrlDer(der: Array<Byte>): X509Crl {
     let crlElem = derReadSingleElement(der, "X509 CRL")
     if (crlElem.tag != DER_TAG_SEQUENCE) {
@@ -573,6 +593,11 @@ public func x509ParseCrlPem(crlPem: String): X509Crl {
     x509ParseCrlDer(decodeSinglePemBlock(crlPem, "X509 CRL"))
 }
 
+/**
+ * x509VerifyCrlSignatureWithIssuer.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509VerifyCrlSignatureWithIssuer(
     crl: X509Crl,
     issuer: X509Certificate,
@@ -629,6 +654,11 @@ public func x509VerifyCrlSignatureWithIssuer(
     throw CryptoException(Unsupported, "unsupported CRL signature algorithm OID: ${oid}")
 }
 
+/**
+ * x509DerToPem.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DerToPem(der: Array<Byte>): String {
     if (der.size == 0) {
         throw CryptoException(InvalidArgument, "DER data must not be empty")
@@ -700,6 +730,11 @@ public func x509FindExtension(cert: X509Certificate, oid: String): ?X509Extensio
     None
 }
 
+/**
+ * x509DecodeKeyUsageFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeKeyUsageFromExtension(extension: X509Extension): Int64 {
     if (extension.oid != X509_OID_KEY_USAGE) {
         throw CryptoException(InvalidArgument, "extension is not keyUsage")
@@ -707,6 +742,11 @@ public func x509DecodeKeyUsageFromExtension(extension: X509Extension): Int64 {
     x509DecodeKeyUsageBits(extension.value)
 }
 
+/**
+ * x509DecodeBasicConstraintsFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeBasicConstraintsFromExtension(extension: X509Extension): X509BasicConstraints {
     if (extension.oid != X509_OID_BASIC_CONSTRAINTS) {
         throw CryptoException(InvalidArgument, "extension is not basicConstraints")
@@ -714,6 +754,11 @@ public func x509DecodeBasicConstraintsFromExtension(extension: X509Extension): X
     x509DecodeBasicConstraintsBits(extension.value)
 }
 
+/**
+ * x509DecodeSubjectKeyIdentifierFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeSubjectKeyIdentifierFromExtension(extension: X509Extension): Array<Byte> {
     if (extension.oid != X509_OID_SUBJECT_KEY_IDENTIFIER) {
         throw CryptoException(InvalidArgument, "extension is not subjectKeyIdentifier")
@@ -721,6 +766,11 @@ public func x509DecodeSubjectKeyIdentifierFromExtension(extension: X509Extension
     x509DecodeSubjectKeyIdentifierBits(extension.value)
 }
 
+/**
+ * x509DecodeAuthorityKeyIdentifierFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeAuthorityKeyIdentifierFromExtension(extension: X509Extension): X509AuthorityKeyIdentifier {
     if (extension.oid != X509_OID_AUTHORITY_KEY_IDENTIFIER) {
         throw CryptoException(InvalidArgument, "extension is not authorityKeyIdentifier")
@@ -728,6 +778,11 @@ public func x509DecodeAuthorityKeyIdentifierFromExtension(extension: X509Extensi
     x509DecodeAuthorityKeyIdentifierBits(extension.value)
 }
 
+/**
+ * x509DecodeCrlDistributionPointsFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeCrlDistributionPointsFromExtension(extension: X509Extension): Array<X509CrlDistributionPoint> {
     if (extension.oid != X509_OID_CRL_DISTRIBUTION_POINTS) {
         throw CryptoException(InvalidArgument, "extension is not CRL distribution points")
@@ -735,6 +790,11 @@ public func x509DecodeCrlDistributionPointsFromExtension(extension: X509Extensio
     x509DecodeCrlDistributionPoints(extension.value)
 }
 
+/**
+ * x509DecodeExtendedKeyUsageFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeExtendedKeyUsageFromExtension(extension: X509Extension): Array<String> {
     if (extension.oid != X509_OID_EXTENDED_KEY_USAGE) {
         throw CryptoException(InvalidArgument, "extension is not extendedKeyUsage")
@@ -742,6 +802,11 @@ public func x509DecodeExtendedKeyUsageFromExtension(extension: X509Extension): A
     x509DecodeExtendedKeyUsageOids(extension.value)
 }
 
+/**
+ * x509DecodeSubjectAlternativeNameDnsFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeSubjectAlternativeNameDnsFromExtension(extension: X509Extension): Array<String> {
     if (extension.oid != X509_OID_SUBJECT_ALT_NAME) {
         throw CryptoException(InvalidArgument, "extension is not subjectAltName")
@@ -749,6 +814,11 @@ public func x509DecodeSubjectAlternativeNameDnsFromExtension(extension: X509Exte
     x509DecodeSubjectAlternativeNameDns(extension.value)
 }
 
+/**
+ * x509DecodeCertificatePoliciesFromExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeCertificatePoliciesFromExtension(extension: X509Extension): Array<String> {
     if (extension.oid != X509_OID_CERTIFICATE_POLICIES) {
         throw CryptoException(InvalidArgument, "extension is not certificatePolicies")
@@ -756,6 +826,11 @@ public func x509DecodeCertificatePoliciesFromExtension(extension: X509Extension)
     x509DecodeCertificatePolicyOids(extension.value)
 }
 
+/**
+ * x509ExtractCrlDistributionPointUris.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ExtractCrlDistributionPointUris(cert: X509Certificate): Array<String> {
     let ext = x509FindExtension(cert, X509_OID_CRL_DISTRIBUTION_POINTS)
     if (let None <- ext) {
@@ -777,6 +852,11 @@ public func x509ExtractCrlDistributionPointUris(cert: X509Certificate): Array<St
     throw CryptoException(ParseError, "CRL distribution points extension resolution failed")
 }
 
+/**
+ * x509ExtractExtendedKeyUsageOids.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ExtractExtendedKeyUsageOids(cert: X509Certificate): Array<String> {
     let ext = x509FindExtension(cert, X509_OID_EXTENDED_KEY_USAGE)
     if (let None <- ext) {
@@ -788,6 +868,11 @@ public func x509ExtractExtendedKeyUsageOids(cert: X509Certificate): Array<String
     throw CryptoException(ParseError, "extendedKeyUsage extension resolution failed")
 }
 
+/**
+ * x509ExtractSubjectAlternativeDnsNames.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ExtractSubjectAlternativeDnsNames(cert: X509Certificate): Array<String> {
     let ext = x509FindExtension(cert, X509_OID_SUBJECT_ALT_NAME)
     if (let None <- ext) {
@@ -799,6 +884,11 @@ public func x509ExtractSubjectAlternativeDnsNames(cert: X509Certificate): Array<
     throw CryptoException(ParseError, "subjectAltName extension resolution failed")
 }
 
+/**
+ * x509ExtractCertificatePolicyOids.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ExtractCertificatePolicyOids(cert: X509Certificate): Array<String> {
     let ext = x509FindExtension(cert, X509_OID_CERTIFICATE_POLICIES)
     if (let None <- ext) {
@@ -810,6 +900,11 @@ public func x509ExtractCertificatePolicyOids(cert: X509Certificate): Array<Strin
     throw CryptoException(ParseError, "certificatePolicies extension resolution failed")
 }
 
+/**
+ * x509ExtractSubjectKeyIdentifier.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ExtractSubjectKeyIdentifier(cert: X509Certificate): ?Array<Byte> {
     let ext = x509FindExtension(cert, X509_OID_SUBJECT_KEY_IDENTIFIER)
     if (let None <- ext) {
@@ -821,6 +916,11 @@ public func x509ExtractSubjectKeyIdentifier(cert: X509Certificate): ?Array<Byte>
     throw CryptoException(ParseError, "subjectKeyIdentifier extension resolution failed")
 }
 
+/**
+ * x509ExtractAuthorityKeyIdentifier.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ExtractAuthorityKeyIdentifier(cert: X509Certificate): ?X509AuthorityKeyIdentifier {
     let ext = x509FindExtension(cert, X509_OID_AUTHORITY_KEY_IDENTIFIER)
     if (let None <- ext) {
@@ -832,6 +932,11 @@ public func x509ExtractAuthorityKeyIdentifier(cert: X509Certificate): ?X509Autho
     throw CryptoException(ParseError, "authorityKeyIdentifier extension resolution failed")
 }
 
+/**
+ * x509DecodeKeyUsageBits.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeKeyUsageBits(derEncodedBitString: Array<Byte>): Int64 {
     let elem = derReadSingleElement(derEncodedBitString, "X509 keyUsage value")
     if (elem.tag != DER_TAG_BIT_STRING) {
@@ -870,6 +975,11 @@ public func x509DecodeKeyUsageBits(derEncodedBitString: Array<Byte>): Int64 {
     mask
 }
 
+/**
+ * x509DecodeBasicConstraintsBits.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeBasicConstraintsBits(derEncodedSequence: Array<Byte>): X509BasicConstraints {
     let elem = derReadSingleElement(derEncodedSequence, "X509 basicConstraints value")
     if (elem.tag != DER_TAG_SEQUENCE) {
@@ -893,6 +1003,11 @@ public func x509DecodeBasicConstraintsBits(derEncodedSequence: Array<Byte>): X50
     X509BasicConstraints(ca, pathLenConstraint: pathLen)
 }
 
+/**
+ * x509DecodeSubjectKeyIdentifierBits.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeSubjectKeyIdentifierBits(derEncodedOctetString: Array<Byte>): Array<Byte> {
     let elem = derReadSingleElement(derEncodedOctetString, "X509 subjectKeyIdentifier value")
     if (elem.tag != DER_TAG_OCTET_STRING) {
@@ -904,6 +1019,11 @@ public func x509DecodeSubjectKeyIdentifierBits(derEncodedOctetString: Array<Byte
     elem.value
 }
 
+/**
+ * x509DecodeAuthorityKeyIdentifierBits.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeAuthorityKeyIdentifierBits(derEncodedSequence: Array<Byte>): X509AuthorityKeyIdentifier {
     let elem = derReadSingleElement(derEncodedSequence, "X509 authorityKeyIdentifier value")
     if (elem.tag != DER_TAG_SEQUENCE) {
@@ -952,6 +1072,11 @@ private func x509DecodeAuthorityKeyIdentifierFromExtensions(extensions: Array<X5
     None
 }
 
+/**
+ * x509DecodeCrlDistributionPoints.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeCrlDistributionPoints(derEncodedSequence: Array<Byte>): Array<X509CrlDistributionPoint> {
     let elem = derReadSingleElement(derEncodedSequence, "X509 CRL distribution points value")
     if (elem.tag != DER_TAG_SEQUENCE) {
@@ -967,6 +1092,11 @@ public func x509DecodeCrlDistributionPoints(derEncodedSequence: Array<Byte>): Ar
     points.toArray()
 }
 
+/**
+ * x509DecodeExtendedKeyUsageOids.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeExtendedKeyUsageOids(derEncodedSequence: Array<Byte>): Array<String> {
     let elem = derReadSingleElement(derEncodedSequence, "X509 extendedKeyUsage value")
     if (elem.tag != DER_TAG_SEQUENCE) {
@@ -981,6 +1111,11 @@ public func x509DecodeExtendedKeyUsageOids(derEncodedSequence: Array<Byte>): Arr
     out.toArray()
 }
 
+/**
+ * x509DecodeSubjectAlternativeNameDns.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeSubjectAlternativeNameDns(derEncodedSequence: Array<Byte>): Array<String> {
     let elem = derReadSingleElement(derEncodedSequence, "X509 subjectAltName value")
     if (elem.tag != DER_TAG_SEQUENCE) {
@@ -1003,6 +1138,11 @@ public func x509DecodeSubjectAlternativeNameDns(derEncodedSequence: Array<Byte>)
     out.toArray()
 }
 
+/**
+ * x509DecodeCertificatePolicyOids.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509DecodeCertificatePolicyOids(derEncodedSequence: Array<Byte>): Array<String> {
     let elem = derReadSingleElement(derEncodedSequence, "X509 certificatePolicies value")
     if (elem.tag != DER_TAG_SEQUENCE) {
@@ -1086,6 +1226,11 @@ public func x509CreateSelfSignedEcCertificate(config: X509SelfSignedConfig, priv
     x509ParseDer(certDer)
 }
 
+/**
+ * x509VerifyCertificateChain.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509VerifyCertificateChain(leaf: X509Certificate, policy: X509VerificationPolicy): X509VerificationResult {
     let candidates = concatCertificateArrays(policy.intermediates, policy.trustAnchors)
     let chain = x509BuildSimpleChain(leaf, candidates)
@@ -1152,6 +1297,11 @@ public func x509VerifyCertificateChainWithProfile(
     result
 }
 
+/**
+ * x509VerifySignatureWithIssuer.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509VerifySignatureWithIssuer(cert: X509Certificate, issuer: X509Certificate): Unit {
     x509RequireIssuerNameMatch(cert, issuer)
 
@@ -1193,6 +1343,11 @@ public func x509VerifySignatureWithIssuer(cert: X509Certificate, issuer: X509Cer
     throw CryptoException(Unsupported, "unsupported certificate signature algorithm OID: ${oid}")
 }
 
+/**
+ * x509RequireTimeValidAt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509RequireTimeValidAt(cert: X509Certificate, validationTime: String): Unit {
     let now = normalizeTimeForCompare(validationTime)
     let notBefore = normalizeTimeForCompare(cert.notBefore)
@@ -1206,6 +1361,11 @@ public func x509RequireTimeValidAt(cert: X509Certificate, validationTime: String
     }
 }
 
+/**
+ * x509RequireNotRevoked.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509RequireNotRevoked(cert: X509Certificate, revokedSerialHexLower: Array<String>): Unit {
     if (revokedSerialHexLower.size == 0) {
         return
@@ -1280,6 +1440,11 @@ public func x509ParseRsaPrivateKeyPkcs1Pem(pkcs1Pem: String): RsaPrivateKey {
     x509ParseRsaPrivateKeyPkcs1Der(decodeSinglePemBlock(pkcs1Pem, "RSA PRIVATE KEY"))
 }
 
+/**
+ * x509ParseRsaPrivateKeyPkcs8Der.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ParseRsaPrivateKeyPkcs8Der(pkcs8Der: Array<Byte>): RsaPrivateKey {
     let (algorithmOid, curveOid, privateKeyDer) = decodePkcs8PrivateKeyInfo(pkcs8Der)
     if (algorithmOid != X509_OID_RSA_ENCRYPTION) {
@@ -1295,6 +1460,11 @@ public func x509ParseRsaPrivateKeyPkcs8Pem(pkcs8Pem: String): RsaPrivateKey {
     x509ParseRsaPrivateKeyPkcs8Der(decodeSinglePemBlock(pkcs8Pem, "PRIVATE KEY"))
 }
 
+/**
+ * x509ParseEcPrivateKeyPkcs8Der.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x509ParseEcPrivateKeyPkcs8Der(pkcs8Der: Array<Byte>): EcPrivateKey {
     let (algorithmOid, curveOid, privateKeyDer) = decodePkcs8PrivateKeyInfo(pkcs8Der)
     if (algorithmOid != X509_OID_EC_PUBLIC_KEY) {

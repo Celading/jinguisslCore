@@ -12,6 +12,11 @@ foreign func arc4random_buf(buffer: CPointer<UInt8>, size: UIntNative): Unit
 @When[os == "Linux"]
 foreign func getentropy(buffer: CPointer<UInt8>, size: UIntNative): Int32
 
+/**
+ * bytesToUInt32BE.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func bytesToUInt32BE(bytes: Array<Byte>, offset!: Int64 = 0): UInt32 {
     if (offset < 0 || offset + 4 > bytes.size) {
         throw CryptoException(OutOfBounds, "bytesToUInt32BE out of bounds")
@@ -23,6 +28,11 @@ public func bytesToUInt32BE(bytes: Array<Byte>, offset!: Int64 = 0): UInt32 {
     (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
 }
 
+/**
+ * bytesToUInt32LE.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func bytesToUInt32LE(bytes: Array<Byte>, offset!: Int64 = 0): UInt32 {
     if (offset < 0 || offset + 4 > bytes.size) {
         throw CryptoException(OutOfBounds, "bytesToUInt32LE out of bounds")
@@ -56,6 +66,11 @@ public func secureCopy(source: Array<Byte>): Array<Byte> {
     source.clone()
 }
 
+/**
+ * secureCopyInto.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func secureCopyInto(source: Array<Byte>, destination: Array<Byte>, dstOffset!: Int64 = 0): Unit {
     if (dstOffset < 0) {
         throw CryptoException(OutOfBounds, "destination offset must be non-negative")
@@ -91,6 +106,11 @@ public func constantTimeEquals(left: Array<Byte>, right: Array<Byte>): Bool {
     diff == 0
 }
 
+/**
+ * randomSeed.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func randomSeed(size!: Int64 = 32): Array<Byte> {
     if (size <= 0) {
         throw CryptoException(InvalidArgument, "random seed size must be > 0")
@@ -110,6 +130,11 @@ public func csprngBytes(): Array<Byte> {
     csprngBytes(32)
 }
 
+/**
+ * csprngBytes.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func csprngBytes(size: Int64): Array<Byte> {
     if (size <= 0) {
         throw CryptoException(InvalidArgument, "CSPRNG output size must be > 0")

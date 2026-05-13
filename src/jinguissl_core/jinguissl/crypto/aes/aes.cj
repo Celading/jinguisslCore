@@ -501,6 +501,11 @@ public func aesNativeBridgeExpandKey(handle: AesNativeBridgeHandle, key: Array<B
     encodeNativeBridgeExpandedKeyBlob(handle.contract, key.size, roundKeys, nr)
 }
 
+/**
+ * aesNativeBridgeEncryptBlocks.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesNativeBridgeEncryptBlocks(
     handle: AesNativeBridgeHandle,
     expandedKeyBlob: Array<Byte>,
@@ -517,6 +522,11 @@ public func aesNativeBridgeEncryptBlocks(
     cryptBlocksWithSchedule(roundKeys, nr, plaintextBlocks, decrypt: false)
 }
 
+/**
+ * aesNativeBridgeDecryptBlocks.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesNativeBridgeDecryptBlocks(
     handle: AesNativeBridgeHandle,
     expandedKeyBlob: Array<Byte>,
@@ -533,6 +543,11 @@ public func aesNativeBridgeDecryptBlocks(
     cryptBlocksWithSchedule(roundKeys, nr, ciphertextBlocks, decrypt: true)
 }
 
+/**
+ * aesNativeBridgeGhashMul.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesNativeBridgeGhashMul(
     handle: AesNativeBridgeHandle,
     hashSubkey: Array<Byte>,
@@ -1301,6 +1316,11 @@ private func aesArmv8CeEcbCryptRaw(
     CC_STATUS_UNIMPLEMENTED
 }
 
+/**
+ * pkcs7Pad.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func pkcs7Pad(input: Array<Byte>, blockSize!: Int64 = AES_BLOCK_SIZE): Array<Byte> {
     if (blockSize <= 0 || blockSize > 255) {
         throw CryptoException(InvalidArgument, "invalid block size")
@@ -1316,6 +1336,11 @@ public func pkcs7Pad(input: Array<Byte>, blockSize!: Int64 = AES_BLOCK_SIZE): Ar
     out
 }
 
+/**
+ * pkcs7Unpad.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func pkcs7Unpad(input: Array<Byte>, blockSize!: Int64 = AES_BLOCK_SIZE): Array<Byte> {
     if (blockSize <= 0 || blockSize > 255) {
         throw CryptoException(InvalidArgument, "invalid block size")
@@ -1340,6 +1365,11 @@ public func pkcs7Unpad(input: Array<Byte>, blockSize!: Int64 = AES_BLOCK_SIZE): 
     input[..input.size - pad]
 }
 
+/**
+ * aesEcbEncrypt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesEcbEncrypt(key: Array<Byte>, plaintext: Array<Byte>, pkcs7!: Bool = false): Array<Byte> {
     let input = if (pkcs7) {
         pkcs7Pad(plaintext)
@@ -1376,6 +1406,11 @@ public func aesEcbEncryptChecked(
     aesEcbEncrypt(key, plaintext, pkcs7: pkcs7)
 }
 
+/**
+ * aesEcbDecrypt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesEcbDecrypt(key: Array<Byte>, ciphertext: Array<Byte>, pkcs7!: Bool = false): Array<Byte> {
     if ((ciphertext.size % AES_BLOCK_SIZE) != 0) {
         throw CryptoException(InvalidArgument, "ECB ciphertext must be a multiple of block size")
@@ -1411,6 +1446,11 @@ public func aesEcbDecryptChecked(
     aesEcbDecrypt(key, ciphertext, pkcs7: pkcs7)
 }
 
+/**
+ * aesCbcEncrypt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesCbcEncrypt(
     key: Array<Byte>,
     iv: Array<Byte>,
@@ -1458,6 +1498,11 @@ public func aesCbcEncryptChecked(
     aesCbcEncrypt(key, iv, plaintext, pkcs7: pkcs7)
 }
 
+/**
+ * aesCbcDecrypt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesCbcDecrypt(
     key: Array<Byte>,
     iv: Array<Byte>,
@@ -1518,6 +1563,11 @@ public func aesCtrCryptChecked(
     aesCtrCrypt(key, counterBlock, input)
 }
 
+/**
+ * aesGcmEncrypt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesGcmEncrypt(
     key: Array<Byte>,
     iv: Array<Byte>,
@@ -1532,6 +1582,11 @@ public func aesGcmEncrypt(
     aesGcmEncryptWithContext(ctx, iv, plaintext, aad: aad, tagLen: tagLen)
 }
 
+/**
+ * aesGcmEncryptWithContext.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesGcmEncryptWithContext(
     ctx: AesGcmContext,
     iv: Array<Byte>,
@@ -1565,6 +1620,11 @@ public func aesGcmEncryptInto(
     aesGcmEncryptIntoWithContext(ctx, iv, plaintext, ciphertextOut, tagOut, aad: aad, tagLen: tagLen)
 }
 
+/**
+ * aesGcmEncryptIntoWithContext.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesGcmEncryptIntoWithContext(
     ctx: AesGcmContext,
     iv: Array<Byte>,
@@ -1644,6 +1704,11 @@ public func aesGcmEncryptIntoWithContextChecked(
     aesGcmEncryptIntoWithContext(ctx, iv, plaintext, ciphertextOut, tagOut, aad: aad, tagLen: tagLen)
 }
 
+/**
+ * aesGcmDecrypt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesGcmDecrypt(
     key: Array<Byte>,
     iv: Array<Byte>,
@@ -1658,6 +1723,11 @@ public func aesGcmDecrypt(
     aesGcmDecryptWithContext(ctx, iv, ciphertext, tag, aad: aad)
 }
 
+/**
+ * aesGcmDecryptWithContext.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesGcmDecryptWithContext(
     ctx: AesGcmContext,
     iv: Array<Byte>,
@@ -1713,6 +1783,11 @@ public func aesGcmDecryptInto(
     aesGcmDecryptIntoWithContext(ctx, iv, ciphertext, tag, plaintextOut, aad: aad)
 }
 
+/**
+ * aesGcmDecryptIntoWithContext.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func aesGcmDecryptIntoWithContext(
     ctx: AesGcmContext,
     iv: Array<Byte>,

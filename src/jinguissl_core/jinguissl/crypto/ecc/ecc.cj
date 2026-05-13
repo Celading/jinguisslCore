@@ -70,6 +70,11 @@ public class EcPrivateKey {
     }
 }
 
+/**
+ * namedCurveFromText.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func namedCurveFromText(name: String): NamedCurve {
     let key = name.trimAscii().toAsciiUpper().replace("-", "").replace("_", "")
     match (key) {
@@ -89,6 +94,11 @@ public func isFipsCurve(curve: NamedCurve): Bool {
     }
 }
 
+/**
+ * requireFipsCurve.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func requireFipsCurve(curve: NamedCurve): Unit {
     if (!isFipsCurve(curve)) {
         throw CryptoException(ComplianceRejected, "curve is blocked by FIPS profile: ${curve.toString()}")
@@ -103,6 +113,11 @@ public func ecdhRequireAllowed(profile: FipsProfile): Unit {
     profile.requireAllowed("ECDH")
 }
 
+/**
+ * ecdsaSign.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, BigNum) {
     let params = paramsForCurve(privateKey.curve)
     let d = normalizeScalar(privateKey.scalar, params.n)
@@ -184,6 +199,11 @@ public func ecdsaVerify(publicKey: EcPublicKey, digest: Array<Byte>, r: BigNum, 
     v.cmp(r) == 0
 }
 
+/**
+ * ecdhDeriveSharedSecret.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func ecdhDeriveSharedSecret(privateKey: EcPrivateKey, peerPublicKey: EcPublicKey): Array<Byte> {
     if (privateKey.curve != peerPublicKey.curve) {
         throw CryptoException(InvalidArgument, "ECDH key curve mismatch")
@@ -202,6 +222,11 @@ public func ecdhDeriveSharedSecret(privateKey: EcPrivateKey, peerPublicKey: EcPu
     shared.x.toBytesBE(paddedLen: fieldByteLength(params.p))
 }
 
+/**
+ * ecPublicFromPrivateKey.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func ecPublicFromPrivateKey(privateKey: EcPrivateKey): EcPublicKey {
     let params = paramsForCurve(privateKey.curve)
     let scalar = normalizeScalar(privateKey.scalar, params.n)
