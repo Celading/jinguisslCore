@@ -7,7 +7,7 @@ import jinguissl_core.jinguissl.crypto.ecc.*
 import jinguissl_core.jinguissl.crypto.error.CryptoException
 import jinguissl_core.jinguissl.crypto.rsa.*
 import jinguissl_core.jinguissl.crypto.tls.*
-import jinguissl_core.jinguissl.crypto.x509.*
+import jinguissl_core.jinguissl.crypto.x509.{X509VerificationPolicy, x509ParsePem}
 
 private let P256_GX: BigNum = BigNum.fromHex("6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296")
 private let P256_GY: BigNum = BigNum.fromHex("4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5")

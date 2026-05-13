@@ -1,11 +1,11 @@
 package jinguissl_core.jinguissl.crypto.tls
 
 import std.collection.ArrayList
-import jinguissl_core.jinguissl.crypto.compliance.*
-import jinguissl_core.jinguissl.crypto.ecc.*
+import jinguissl_core.jinguissl.crypto.compliance.{FipsProfile}
+import jinguissl_core.jinguissl.crypto.ecc.{EcPrivateKey, EcPublicKey}
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
-import jinguissl_core.jinguissl.crypto.rsa.*
-import jinguissl_core.jinguissl.crypto.x509.*
+import jinguissl_core.jinguissl.crypto.rsa.{RsaPrivateKey}
+import jinguissl_core.jinguissl.crypto.x509.{X509VerificationPolicy, X509VerificationResult}
 
 public let TLS_HTTP_ALPN_H2: String = "h2"
 public let TLS_HTTP_ALPN_HTTP11: String = "http/1.1"

@@ -1,7 +1,7 @@
 package jinguissl_core.jinguissl.tests
 
 import jinguissl_core.jinguissl.crypto.error.CryptoException
-import jinguissl_core.jinguissl.crypto.x25519.*
+import jinguissl_core.jinguissl.crypto.x25519.{X25519_KEY_LEN, x25519ClampPrivateKey, x25519DeriveSharedSecret, x25519GeneratePrivateKey, x25519PublicFromPrivate}
 
 @Test
 public class X25519TestSuite {

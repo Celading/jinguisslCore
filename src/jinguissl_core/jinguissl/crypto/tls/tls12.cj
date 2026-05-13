@@ -1,15 +1,15 @@
 package jinguissl_core.jinguissl.crypto.tls
 
 import std.collection.ArrayList
-import jinguissl_core.jinguissl.crypto.aes.*
+import jinguissl_core.jinguissl.crypto.aes.{AesEngineKind}
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
-import jinguissl_core.jinguissl.crypto.compliance.*
+import jinguissl_core.jinguissl.crypto.compliance.{FipsProfile}
 import jinguissl_core.jinguissl.crypto.digest.{hmac, HashAlgorithm}
-import jinguissl_core.jinguissl.crypto.ecc.*
+import jinguissl_core.jinguissl.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecdhDeriveSharedSecret, requireFipsCurve}
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.rsa.{RsaPrivateKey, RsaPublicKey}
 import jinguissl_core.jinguissl.crypto.utils.{randomSeed, secureCopyInto}
-import jinguissl_core.jinguissl.crypto.x509.*
+import jinguissl_core.jinguissl.crypto.x509.{X509Certificate, X509VerificationPolicy, X509VerificationResult, x509ParseDer, x509VerifyCertificateChain, x509VerifyCertificateChainWithProfile}
 
 public enum Tls12KeyExchange <: Equatable<Tls12KeyExchange> & ToString {
     | RSA
