@@ -1,3 +1,4 @@
+/** @internal - Base encoding utility (Endian, SecureBytes, ByteBuffer), not a standalone product interface. Do not add contract barrier. */
 package jinguissl_core.jinguissl.crypto.base
 
 import std.collection.ArrayList

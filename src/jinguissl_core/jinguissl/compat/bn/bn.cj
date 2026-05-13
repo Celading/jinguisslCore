@@ -1,3 +1,4 @@
+/** @internal - OpenSSL BIGNUM compatibility shim, not a standalone product interface. Do not add contract barrier. */
 package jinguissl_core.jinguissl.compat.bn
 
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
