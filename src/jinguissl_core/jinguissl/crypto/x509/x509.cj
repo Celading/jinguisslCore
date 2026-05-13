@@ -5,7 +5,7 @@ import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.compliance.FipsProfile
 import jinguissl_core.jinguissl.crypto.digest.{bytesToHexLower, sha256, sha384, sha512}
 import jinguissl_core.jinguissl.crypto.ecc.*
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.rsa.{RsaPrivateKey, RsaPublicKey, RsaHashAlgorithm, rsaSignPkcs1v15WithHash, rsaVerifyPkcs1v15WithHash}
 import jinguissl_core.jinguissl.crypto.utils.{constantTimeEquals, secureCopyInto}
 

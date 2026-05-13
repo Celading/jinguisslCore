@@ -1,7 +1,7 @@
 package jinguissl_core.jinguissl.crypto.utils
 
 import std.random.Random
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 private let GETENTROPY_OK: Int32 = Int32(0)
 private let GETENTROPY_MAX_LEN: Int64 = 256

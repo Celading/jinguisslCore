@@ -1,7 +1,7 @@
 package jinguissl_core.jinguissl.crypto.perf
 
 import std.time.MonoTime
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 @When[os == "Linux"]
 foreign func sched_setaffinity(

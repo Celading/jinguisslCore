@@ -1,10 +1,10 @@
 package jinguissl_core.jinguissl.crypto.rsa
 
-import std.math.numeric.*
+import std.math.numeric.{BigInt, abs}
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.compliance.FipsProfile
 import jinguissl_core.jinguissl.crypto.digest.{sha1, sha256, sha384, sha512}
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.{constantTimeEquals, csprngBytes, randomSeed, secureCopyInto}
 
 private let RSA_KEYGEN_OUTER_MAX_ATTEMPTS: Int64 = 32

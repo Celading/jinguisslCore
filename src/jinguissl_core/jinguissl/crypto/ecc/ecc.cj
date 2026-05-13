@@ -1,9 +1,9 @@
 package jinguissl_core.jinguissl.crypto.ecc
 
-import std.math.numeric.*
+import std.math.numeric.{BigInt}
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.compliance.FipsProfile
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.randomSeed
 
 public enum NamedCurve <: Equatable<NamedCurve> & ToString {

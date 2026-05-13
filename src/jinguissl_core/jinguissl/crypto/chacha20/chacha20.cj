@@ -1,8 +1,8 @@
 package jinguissl_core.jinguissl.crypto.chacha20
 
-import std.math.numeric.*
+import std.math.numeric.{BigInt}
 import jinguissl_core.jinguissl.crypto.compliance.FipsProfile
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.constantTimeEquals
 
 public let CHACHA20_KEY_LEN: Int64 = 32

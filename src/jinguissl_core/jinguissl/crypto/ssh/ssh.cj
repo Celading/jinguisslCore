@@ -18,7 +18,7 @@ import jinguissl_core.jinguissl.crypto.chacha20.{
 import jinguissl_core.jinguissl.crypto.digest.{hmac, sha1, sha256, sha384, sha512, HashAlgorithm}
 import jinguissl_core.jinguissl.crypto.ed25519.{ed25519PublicKeyFromSeed, ed25519Sign, ed25519Verify, ED25519_PUBLIC_KEY_LEN, ED25519_SIGNATURE_LEN}
 import jinguissl_core.jinguissl.crypto.ecc.*
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.rsa.{RsaHashAlgorithm, RsaPrivateKey, RsaPublicKey, rsaSignPkcs1v15WithHash, rsaVerifyPkcs1v15WithHash}
 import jinguissl_core.jinguissl.crypto.utils.{constantTimeEquals, randomSeed, secureCopyInto}
 import jinguissl_core.jinguissl.crypto.x25519.*
