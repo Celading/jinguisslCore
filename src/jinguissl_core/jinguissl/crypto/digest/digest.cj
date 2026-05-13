@@ -483,3 +483,109 @@ private func not64(v: UInt64): UInt64 {
 private func u64Word(hi: UInt32, lo: UInt32): UInt64 {
     (UInt64(hi) << 32) | UInt64(lo)
 }
+
+public func hmac(algorithm: HashAlgorithm, key: Array<Byte>, data: Array<Byte>): Array<Byte> {
+    let blockSize = match (algorithm) {
+        case MD5 | SHA1 | SHA256 => 64
+        case SHA384 | SHA512 => 128
+    }
+
+    var normalizedKey = if (key.size > blockSize) {
+        hash(algorithm, key)
+    } else {
+        key.clone()
+    }
+
+    if (normalizedKey.size < blockSize) {
+        let padded = Array<Byte>(blockSize, repeat: 0)
+        secureCopyInto(normalizedKey, padded)
+        normalizedKey = padded
+    }
+
+    let iPad = Array<Byte>(blockSize, repeat: 0)
+    let oPad = Array<Byte>(blockSize, repeat: 0)
+
+    var i = 0
+    while (i < blockSize) {
+        let b = UInt8(normalizedKey[i])
+        iPad[i] = b ^ UInt8(0x36)
+        oPad[i] = b ^ UInt8(0x5c)
+        i += 1
+    }
+
+    let inner = hash(algorithm, concat(iPad, data))
+    hash(algorithm, concat(oPad, inner))
+}
+
+public func hkdfExtract(
+    algorithm: HashAlgorithm,
+    salt: Array<Byte>,
+    ikm: Array<Byte>
+): Array<Byte> {
+    let digestLen = digestLength(algorithm)
+    let effectiveSalt = if (salt.size == 0) {
+        Array<Byte>(digestLen, repeat: 0)
+    } else {
+        salt
+    }
+    hmac(algorithm, effectiveSalt, ikm)
+}
+
+public func hkdfExpand(
+    algorithm: HashAlgorithm,
+    prk: Array<Byte>,
+    info: Array<Byte>,
+    outputLen: Int64
+): Array<Byte> {
+    if (outputLen < 0) {
+        throw CryptoException(InvalidArgument, "HKDF output length must be >= 0")
+    }
+    if (outputLen == 0) {
+        return []
+    }
+    if (prk.size == 0) {
+        throw CryptoException(InvalidArgument, "HKDF PRK must not be empty")
+    }
+
+    let digestLen = digestLength(algorithm)
+    let maxLen = digestLen * 255
+    if (outputLen > maxLen) {
+        throw CryptoException(OutOfBounds, "HKDF output length is too large")
+    }
+
+    let okm = ArrayList<Byte>()
+    var previous = Array<Byte>(0, repeat: 0)
+    var blockIndex: Int64 = 1
+
+    while (okm.size < outputLen) {
+        let indexByte = Array<Byte>(1, repeat: UInt8(blockIndex))
+        let input = concat(concat(previous, info), indexByte)
+        previous = hmac(algorithm, prk, input)
+
+        let remaining = outputLen - okm.size
+        let take = if (remaining < digestLen) {
+            remaining
+        } else {
+            digestLen
+        }
+        var i: Int64 = 0
+        while (i < take) {
+            okm.add(previous[i])
+            i += 1
+        }
+        blockIndex += 1
+    }
+
+    okm.toArray()
+}
+
+public func hkdf(
+    algorithm: HashAlgorithm,
+    ikm: Array<Byte>,
+    info: Array<Byte>,
+    outputLen: Int64,
+    salt!: Array<Byte> = []
+): Array<Byte> {
+    let prk = hkdfExtract(algorithm, salt, ikm)
+    hkdfExpand(algorithm, prk, info, outputLen)
+}
