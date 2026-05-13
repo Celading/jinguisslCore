@@ -1,8 +1,8 @@
 package jinguissl_core.jinguissl.crypto.bignum
 
-import std.math.numeric.*
+import std.math.numeric.{BigInt, abs}
 import std.collection.ArrayList
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 public class BigNum <: Equatable<BigNum> & ToString {
     let _value: BigInt

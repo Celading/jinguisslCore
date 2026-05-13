@@ -1,10 +1,10 @@
 package jinguissl_core.jinguissl.crypto.ed25519
 
 import std.collection.ArrayList
-import std.math.numeric.*
+import std.math.numeric.{BigInt}
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.digest.sha512
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.csprngBytes
 
 public let ED25519_SEED_LEN: Int64 = 32

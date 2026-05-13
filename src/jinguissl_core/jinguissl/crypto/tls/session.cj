@@ -3,7 +3,7 @@ package jinguissl_core.jinguissl.crypto.tls
 import std.collection.ArrayList
 import jinguissl_core.jinguissl.crypto.compliance.*
 import jinguissl_core.jinguissl.crypto.digest.bytesToHexLower
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 public let TLS_SESSION_TICKET_VERSION: Int64 = 1
 public let TLS_SESSION_DEFAULT_TTL_SECONDS: Int64 = 7200

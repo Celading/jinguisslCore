@@ -2,7 +2,7 @@
 package jinguissl_core.jinguissl.crypto.base
 
 import std.collection.ArrayList
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 public enum Endian <: Equatable<Endian> & ToString {
     | Big

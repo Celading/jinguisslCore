@@ -2,7 +2,7 @@ package jinguissl_core.jinguissl.crypto.aes
 
 import std.env.getVariable
 import jinguissl_core.jinguissl.crypto.compliance.FipsProfile
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.secureCopyInto
 
 public enum AesMode <: Equatable<AesMode> & ToString {

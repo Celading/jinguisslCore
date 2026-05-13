@@ -4,7 +4,7 @@ import std.collection.ArrayList
 import jinguissl_core.jinguissl.crypto.aes.*
 import jinguissl_core.jinguissl.crypto.chacha20.*
 import jinguissl_core.jinguissl.crypto.compliance.*
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.secureCopyInto
 
 public let TLS_RECORD_HEADER_LEN: Int64 = 5

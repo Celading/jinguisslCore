@@ -2,7 +2,7 @@ package jinguissl_core.jinguissl.crypto.ecc
 
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.digest.sha256
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 private let ES256_P256_COORDINATE_BYTES: Int64 = 32
 private let ES256_P256_DIGEST_BYTES: Int64 = 32

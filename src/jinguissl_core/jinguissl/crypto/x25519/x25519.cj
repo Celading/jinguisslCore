@@ -1,7 +1,7 @@
 package jinguissl_core.jinguissl.crypto.x25519
 
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.csprngBytes
 
 public let X25519_KEY_LEN: Int64 = 32

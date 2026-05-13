@@ -2,7 +2,7 @@ package jinguissl_core.jinguissl.crypto.compliance
 
 import std.collection.HashSet
 import std.collection.ArrayList
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 public enum TlsVersion <: Equatable<TlsVersion> & ToString {
     | TLS1_2

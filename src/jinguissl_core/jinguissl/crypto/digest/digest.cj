@@ -1,7 +1,7 @@
 package jinguissl_core.jinguissl.crypto.digest
 
 import std.collection.ArrayList
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.*
 
 public enum HashAlgorithm <: Equatable<HashAlgorithm> & ToString {

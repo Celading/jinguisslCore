@@ -6,7 +6,7 @@ import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.compliance.*
 import jinguissl_core.jinguissl.crypto.digest.{hmac, sha256, sha384, HashAlgorithm}
 import jinguissl_core.jinguissl.crypto.ecc.*
-import jinguissl_core.jinguissl.crypto.error.*
+import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.rsa.*
 import jinguissl_core.jinguissl.crypto.utils.{constantTimeEquals, randomSeed, secureCopyInto}
 import jinguissl_core.jinguissl.crypto.x25519.*
