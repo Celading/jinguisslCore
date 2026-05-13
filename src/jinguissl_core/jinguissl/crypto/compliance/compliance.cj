@@ -92,7 +92,12 @@ public class FipsProfile {
         _allowList.contains(key)
     }
 
-    public func requireAllowed(algorithm: String): Unit {
+    /**
+ * requireAllowed.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func requireAllowed(algorithm: String): Unit {
         if (!isAllowed(algorithm)) {
             throw CryptoException(ComplianceRejected, "algorithm is blocked by FIPS profile: ${algorithm}")
         }

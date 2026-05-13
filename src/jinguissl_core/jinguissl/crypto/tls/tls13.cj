@@ -243,7 +243,12 @@ public class Tls13RecordLayerHandle {
         this._chachaLayer = chachaLayer
     }
 
-    public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
+    /**
+ * seal.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
         match (algorithm) {
             case AES_GCM =>
                 if (let Some(layer) <- _aesLayer) {
@@ -258,7 +263,12 @@ public class Tls13RecordLayerHandle {
         }
     }
 
-    public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
+    /**
+ * open.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
         match (algorithm) {
             case AES_GCM =>
                 if (let Some(layer) <- _aesLayer) {
@@ -273,7 +283,12 @@ public class Tls13RecordLayerHandle {
         }
     }
 
-    public func resetSequences(): Unit {
+    /**
+ * resetSequences.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func resetSequences(): Unit {
         match (algorithm) {
             case AES_GCM =>
                 if (let Some(layer) <- _aesLayer) {
@@ -315,14 +330,24 @@ public class Tls13RecordChannel {
         }
     }
 
-    public func sealApplicationData(plaintext: Array<Byte>): Array<Byte> {
+    /**
+ * sealApplicationData.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func sealApplicationData(plaintext: Array<Byte>): Array<Byte> {
         if (_state != Active) {
             throw CryptoException(ParseError, "TLS1.3 record channel is not active for application data")
         }
         handle.seal(ApplicationData, plaintext)
     }
 
-    public func sendCloseNotify(): Array<Byte> {
+    /**
+ * sendCloseNotify.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func sendCloseNotify(): Array<Byte> {
         if (_state == Closed) {
             throw CryptoException(ParseError, "TLS1.3 record channel is already closed")
         }
@@ -337,7 +362,12 @@ public class Tls13RecordChannel {
         handle.seal(Alert, tlsEncodeAlert(Warning, CloseNotify))
     }
 
-    public func sendFatalAlert(description: TlsAlertDescription): Array<Byte> {
+    /**
+ * sendFatalAlert.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func sendFatalAlert(description: TlsAlertDescription): Array<Byte> {
         if (_state == Closed) {
             throw CryptoException(ParseError, "TLS1.3 record channel is already closed")
         }
@@ -345,7 +375,12 @@ public class Tls13RecordChannel {
         handle.seal(Alert, tlsEncodeAlert(Fatal, description))
     }
 
-    public func openRecord(encodedRecord: Array<Byte>): Tls13RecordChannelInbound {
+    /**
+ * openRecord.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func openRecord(encodedRecord: Array<Byte>): Tls13RecordChannelInbound {
         if (_state == Closed) {
             throw CryptoException(ParseError, "TLS1.3 record channel is already closed")
         }
@@ -606,6 +641,11 @@ public func tls13HandshakeRequireAllowed(
     }
 }
 
+/**
+ * tls13CipherSuiteAeadAlgorithm.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13CipherSuiteAeadAlgorithm(cipherSuite: Int64): TlsAeadAlgorithm {
     if (cipherSuite == TLS13_CIPHER_SUITE_AES_128_GCM_SHA256) {
         return AES_GCM
@@ -616,6 +656,11 @@ public func tls13CipherSuiteAeadAlgorithm(cipherSuite: Int64): TlsAeadAlgorithm 
     throw CryptoException(Unsupported, "TLS1.3 cipher suite is unsupported: ${cipherSuite}")
 }
 
+/**
+ * tls13CipherSuiteKeyLen.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13CipherSuiteKeyLen(cipherSuite: Int64): Int64 {
     if (cipherSuite == TLS13_CIPHER_SUITE_AES_128_GCM_SHA256) {
         return 16
@@ -716,6 +761,11 @@ public func tls13BuildClientHelloPsk(
     tls13BuildClientHelloPskWithOptionalBinder(pskIdentity, None, sessionId)
 }
 
+/**
+ * tls13BuildClientHelloPskWithBinder.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildClientHelloPskWithBinder(
     pskIdentity: Array<Byte>,
     psk: Array<Byte>,
@@ -727,6 +777,11 @@ public func tls13BuildClientHelloPskWithBinder(
     tls13BuildClientHelloPskWithBinders([pskIdentity], [psk], sessionId: sessionId)
 }
 
+/**
+ * tls13BuildClientHelloPskWithBinders.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildClientHelloPskWithBinders(
     pskIdentities: Array<Array<Byte>>,
     psks: Array<Array<Byte>>,
@@ -779,6 +834,11 @@ public func tls13BuildClientHelloPskFromSessionTicket(
     tls13BuildClientHelloPskWithBinder(identity, ticket.secret, sessionId: sessionId)
 }
 
+/**
+ * tls13BuildClientHelloPskFromSessionTickets.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildClientHelloPskFromSessionTickets(
     tickets: Array<TlsSessionTicket>,
     sessionId!: Array<Byte> = []
@@ -830,6 +890,11 @@ private func tls13BuildClientHelloPskWithOptionalBinder(
     tlsEncodeClientHelloHandshake(hello)
 }
 
+/**
+ * tls13BuildServerHelloForEcdhe.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildServerHelloForEcdhe(
     encodedClientHello: Array<Byte>,
     serverKeyShare: EcPublicKey
@@ -883,6 +948,11 @@ public func tls13BuildServerHelloForX25519(
     tlsEncodeServerHelloHandshake(hello)
 }
 
+/**
+ * tls13BuildServerHelloForPsk.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildServerHelloForPsk(
     encodedClientHello: Array<Byte>,
     selectedIdentityIndex!: Int64 = 0
@@ -916,6 +986,11 @@ public func tls13BuildServerHelloForPsk(
     tlsEncodeServerHelloHandshake(hello)
 }
 
+/**
+ * tls13VerifyClientPskBinder.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13VerifyClientPskBinder(
     encodedClientHello: Array<Byte>,
     psk: Array<Byte>,
@@ -944,6 +1019,11 @@ public func tls13VerifyClientPskBinder(
     constantTimeEquals(providedBinder, expectedBinder)
 }
 
+/**
+ * tls13BuildServerHelloForPskWithBinder.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildServerHelloForPskWithBinder(
     encodedClientHello: Array<Byte>,
     psk: Array<Byte>,
@@ -960,6 +1040,11 @@ public func tls13BuildServerHelloForPskWithBinder(
     tls13BuildServerHelloForPsk(encodedClientHello, selectedIdentityIndex: selectedIdentityIndex)
 }
 
+/**
+ * tls13BuildServerHelloForPskFromSessionTicket.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildServerHelloForPskFromSessionTicket(
     encodedClientHello: Array<Byte>,
     selectedIdentityIndex!: Int64 = 0,
@@ -997,6 +1082,11 @@ public func tls13BuildServerHelloForPskBySessionTickets(
     )
 }
 
+/**
+ * tls13ExtractClientPskIdentity.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ExtractClientPskIdentity(
     encodedClientHello: Array<Byte>,
     selectedIdentityIndex!: Int64 = 0
@@ -1033,6 +1123,11 @@ public func tls13ExtractClientPskIdentities(encodedClientHello: Array<Byte>): Ar
     entries.toArray()
 }
 
+/**
+ * tls13SelectPskIdentityFromSessionTickets.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13SelectPskIdentityFromSessionTickets(
     encodedClientHello: Array<Byte>,
     nowUnixSeconds!: Int64 = 0
@@ -1064,6 +1159,11 @@ public func tls13SelectPskIdentityFromSessionTickets(
     throw CryptoException(ParseError, "TLS1.3 client did not offer a valid session ticket binder")
 }
 
+/**
+ * tls13ExtractServerSelectedPskIdentity.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ExtractServerSelectedPskIdentity(encodedServerHello: Array<Byte>): Int64 {
     let serverHello = tlsDecodeServerHelloHandshake(encodedServerHello)
     let ext = tls13RequireExtension(serverHello.extensions, TLS13_EXT_PRE_SHARED_KEY, "TLS1.3 server pre_shared_key")
@@ -1106,6 +1206,11 @@ public func tls13BuildCertificateHandshakeFromDerChain(
     tlsEncodeCertificateHandshakeTls13(Tls13CertificateMessage(requestContext: requestContext, entries: entries.toArray()))
 }
 
+/**
+ * tls13ParseCertificateChainFromHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ParseCertificateChainFromHandshake(encodedCertificate: Array<Byte>): Array<X509Certificate> {
     let message = tlsDecodeCertificateHandshakeTls13(encodedCertificate)
     if (message.entries.size == 0) {
@@ -1241,6 +1346,11 @@ public func tls13ProcessClientAuthFlightForServerContext(
     )
 }
 
+/**
+ * tls13ProcessClientAuthFlightForServerContextWithRequirement.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ProcessClientAuthFlightForServerContextWithRequirement(
     context: Tls13ServerClientAuthContext,
     policy: X509VerificationPolicy,
@@ -1279,6 +1389,11 @@ public func tls13BuildEncryptedExtensions(
     tlsEncodeEncryptedExtensionsHandshake(TlsEncryptedExtensionsMessage(extensions: extensions.toArray()))
 }
 
+/**
+ * tls13DecodeEncryptedExtensionsSummary.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DecodeEncryptedExtensionsSummary(encodedEncryptedExtensions: Array<Byte>): (String, Bool) {
     let message = tlsDecodeEncryptedExtensionsHandshake(encodedEncryptedExtensions)
     var selectedAlpn = ""
@@ -1319,6 +1434,11 @@ public func tls13ExtractClientServerName(encodedClientHello: Array<Byte>): Strin
     ""
 }
 
+/**
+ * tls13BuildServerHandshakeContextEcdheP256.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildServerHandshakeContextEcdheP256(
     encodedClientHello: Array<Byte>,
     serverKeyExchangePrivate: EcPrivateKey,
@@ -1373,6 +1493,11 @@ public func tls13BuildServerHandshakeContextEcdheP256(
     Tls13ServerHandshakeContext(flight, secrets)
 }
 
+/**
+ * tls13BuildServerHandshakeContextEcdheP384.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildServerHandshakeContextEcdheP384(
     encodedClientHello: Array<Byte>,
     serverKeyExchangePrivate: EcPrivateKey,
@@ -1583,6 +1708,11 @@ public func tls13BuildServerClientAuthContextX25519(
     )
 }
 
+/**
+ * tls13ProcessServerHandshakeFlightEcdheP256.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ProcessServerHandshakeFlightEcdheP256(
     encodedClientHello: Array<Byte>,
     clientKeyExchangePrivate: EcPrivateKey,
@@ -1625,6 +1755,11 @@ public func tls13ProcessServerHandshakeFlightEcdheP256(
     )
 }
 
+/**
+ * tls13ProcessServerHandshakeFlightEcdheP384.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ProcessServerHandshakeFlightEcdheP384(
     encodedClientHello: Array<Byte>,
     clientKeyExchangePrivate: EcPrivateKey,
@@ -1667,6 +1802,11 @@ public func tls13ProcessServerHandshakeFlightEcdheP384(
     )
 }
 
+/**
+ * tls13ProcessServerHandshakeFlightX25519.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ProcessServerHandshakeFlightX25519(
     encodedClientHello: Array<Byte>,
     clientKeyExchangePrivate: Array<Byte>,
@@ -1758,6 +1898,11 @@ public func tls13BuildClientAuthFlightRsaPss(
     Tls13AuthFlight(Tls13AuthFlightRole.CLIENT, certificate, certificateVerify, finished)
 }
 
+/**
+ * tls13BuildClientAuthFlightForCertificateRequest.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildClientAuthFlightForCertificateRequest(
     certChainDer: Array<Array<Byte>>,
     encodedCertificateRequest: Array<Byte>,
@@ -1850,6 +1995,11 @@ public func tls13BuildClientAuthFlightForCertificateRequest(
     )
 }
 
+/**
+ * tls13VerifyServerAuthFlight.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13VerifyServerAuthFlight(
     flight: Tls13AuthFlight,
     policy: X509VerificationPolicy,
@@ -1869,6 +2019,11 @@ public func tls13VerifyServerAuthFlight(
     verification
 }
 
+/**
+ * tls13VerifyServerAuthFlightWithProfile.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13VerifyServerAuthFlightWithProfile(
     flight: Tls13AuthFlight,
     policy: X509VerificationPolicy,
@@ -1889,6 +2044,11 @@ public func tls13VerifyServerAuthFlightWithProfile(
     verification
 }
 
+/**
+ * tls13VerifyClientAuthFlight.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13VerifyClientAuthFlight(
     flight: Tls13AuthFlight,
     policy: X509VerificationPolicy,
@@ -1908,6 +2068,11 @@ public func tls13VerifyClientAuthFlight(
     verification
 }
 
+/**
+ * tls13VerifyClientAuthFlightWithProfile.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13VerifyClientAuthFlightWithProfile(
     flight: Tls13AuthFlight,
     policy: X509VerificationPolicy,
@@ -2003,6 +2168,11 @@ public func tls13VerifyClientCertificateVerify(
     tls13VerifyCertificateVerify(encodedCertificateVerify, certificate, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_CLIENT)
 }
 
+/**
+ * tls13DeriveSecretsFromEcdhe.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DeriveSecretsFromEcdhe(
     privateKey: EcPrivateKey,
     peerPublicKey: EcPublicKey,
@@ -2077,6 +2247,11 @@ public func tls13DeriveSecretsFromX25519ForCipherSuite(
     )
 }
 
+/**
+ * tls13DeriveSecretsFromPsk.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DeriveSecretsFromPsk(
     psk: Array<Byte>,
     transcriptHash: Array<Byte>,
@@ -2110,6 +2285,11 @@ public func tls13DeriveSecretsFromPskForCipherSuite(
     )
 }
 
+/**
+ * tls13DeriveSecretsFromPskAndX25519ForCipherSuite.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DeriveSecretsFromPskAndX25519ForCipherSuite(
     psk: Array<Byte>,
     privateKey: Array<Byte>,
@@ -2132,6 +2312,11 @@ public func tls13DeriveSecretsFromPskAndX25519ForCipherSuite(
     tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen)
 }
 
+/**
+ * tls13DeriveEarlyDataSecrets.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DeriveEarlyDataSecrets(
     psk: Array<Byte>,
     clientHelloHash: Array<Byte>,
@@ -2151,6 +2336,11 @@ public func tls13DeriveEarlyDataSecrets(
     Tls13EarlyDataSecrets(clientEarlyTraffic, clientEarlyWriteKey, clientEarlyWriteIv)
 }
 
+/**
+ * tls13ComputeFinishedVerifyData.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ComputeFinishedVerifyData(baseTrafficSecret: Array<Byte>, transcriptHash: Array<Byte>): Array<Byte> {
     if (baseTrafficSecret.size == 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 finished base secret must not be empty")
@@ -2171,6 +2361,11 @@ public func tls13BuildKeyUpdateHandshake(requestPeerUpdate!: Bool = false): Arra
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(KeyUpdate, [UInt8(requestValue)]))
 }
 
+/**
+ * tls13DecodeKeyUpdateHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DecodeKeyUpdateHandshake(encodedKeyUpdate: Array<Byte>): Bool {
     let frame = tlsDecodeHandshakeFrame(encodedKeyUpdate)
     if (frame.msgType != KeyUpdate) {
@@ -2204,6 +2399,11 @@ public func tls13DeriveApplicationTrafficKeyIv(
     (writeKey, writeIv)
 }
 
+/**
+ * tls13RotateClientApplicationTrafficSecrets.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13RotateClientApplicationTrafficSecrets(secrets: Tls13HandshakeSecrets): Tls13HandshakeSecrets {
     let keyLen = secrets.clientWriteKey.size
     let ivLen = secrets.clientWriteIv.size
@@ -2220,6 +2420,11 @@ public func tls13RotateClientApplicationTrafficSecrets(secrets: Tls13HandshakeSe
     )
 }
 
+/**
+ * tls13RotateServerApplicationTrafficSecrets.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13RotateServerApplicationTrafficSecrets(secrets: Tls13HandshakeSecrets): Tls13HandshakeSecrets {
     let keyLen = secrets.serverWriteKey.size
     let ivLen = secrets.serverWriteIv.size
@@ -2236,6 +2441,11 @@ public func tls13RotateServerApplicationTrafficSecrets(secrets: Tls13HandshakeSe
     )
 }
 
+/**
+ * tls13DeriveExporterMasterSecret.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DeriveExporterMasterSecret(masterSecret: Array<Byte>, transcriptHash: Array<Byte>): Array<Byte> {
     if (masterSecret.size == 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 master secret must not be empty")
@@ -2246,6 +2456,11 @@ public func tls13DeriveExporterMasterSecret(masterSecret: Array<Byte>, transcrip
     tls13DeriveSecret(masterSecret, "exp master", transcriptHash)
 }
 
+/**
+ * tls13ExportKeyingMaterial.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ExportKeyingMaterial(
     exporterMasterSecret: Array<Byte>,
     exporterLabel: String,
@@ -2295,6 +2510,11 @@ public func tls13EncodeNewSessionTicketHandshake(message: Tls13NewSessionTicketM
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(NewSessionTicket, body))
 }
 
+/**
+ * tls13DecodeNewSessionTicketHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13DecodeNewSessionTicketHandshake(encodedNewSessionTicket: Array<Byte>): Tls13NewSessionTicketMessage {
     let frame = tlsDecodeHandshakeFrame(encodedNewSessionTicket)
     if (frame.msgType != NewSessionTicket) {
@@ -2346,6 +2566,11 @@ public func tls13DecodeNewSessionTicketHandshake(encodedNewSessionTicket: Array<
     )
 }
 
+/**
+ * tls13BuildNewSessionTicketFromSessionTicket.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildNewSessionTicketFromSessionTicket(
     ticket: TlsSessionTicket,
     ticketAgeAdd!: Int64 = 0

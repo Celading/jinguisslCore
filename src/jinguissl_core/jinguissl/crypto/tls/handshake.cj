@@ -286,6 +286,11 @@ public func tlsEncodeHandshakeFrame(frame: TlsHandshakeFrame): Array<Byte> {
     out
 }
 
+/**
+ * tlsDecodeHandshakeFrame.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeHandshakeFrame(encoded: Array<Byte>): TlsHandshakeFrame {
     if (encoded.size < TLS_HANDSHAKE_HEADER_LEN) {
         throw CryptoException(ParseError, "TLS handshake is shorter than header")
@@ -319,6 +324,11 @@ public func tlsEncodeClientHelloBody(clientHello: TlsClientHello): Array<Byte> {
     list.toArray()
 }
 
+/**
+ * tlsDecodeClientHelloBody.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeClientHelloBody(body: Array<Byte>): TlsClientHello {
     var offset = 0
     let version = hsVersionFromWire(body, offset)
@@ -373,6 +383,11 @@ public func tlsEncodeClientHelloHandshake(clientHello: TlsClientHello): Array<By
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(ClientHello, tlsEncodeClientHelloBody(clientHello)))
 }
 
+/**
+ * tlsDecodeClientHelloHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeClientHelloHandshake(encoded: Array<Byte>): TlsClientHello {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != ClientHello) {
@@ -394,6 +409,11 @@ public func tlsEncodeServerHelloBody(serverHello: TlsServerHello): Array<Byte> {
     list.toArray()
 }
 
+/**
+ * tlsDecodeServerHelloBody.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeServerHelloBody(body: Array<Byte>): TlsServerHello {
     var offset = 0
     let version = hsVersionFromWire(body, offset)
@@ -436,6 +456,11 @@ public func tlsEncodeServerHelloHandshake(serverHello: TlsServerHello): Array<By
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(ServerHello, tlsEncodeServerHelloBody(serverHello)))
 }
 
+/**
+ * tlsDecodeServerHelloHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeServerHelloHandshake(encoded: Array<Byte>): TlsServerHello {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != ServerHello) {
@@ -451,6 +476,11 @@ public func tlsEncodeEncryptedExtensionsHandshake(message: TlsEncryptedExtension
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(EncryptedExtensions, body.toArray()))
 }
 
+/**
+ * tlsDecodeEncryptedExtensionsHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeEncryptedExtensionsHandshake(encoded: Array<Byte>): TlsEncryptedExtensionsMessage {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != EncryptedExtensions) {
@@ -475,6 +505,11 @@ public func tlsEncodeCertificateRequestHandshakeTls13(message: Tls13CertificateR
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(CertificateRequest, body.toArray()))
 }
 
+/**
+ * tlsDecodeCertificateRequestHandshakeTls13.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeCertificateRequestHandshakeTls13(encoded: Array<Byte>): Tls13CertificateRequestMessage {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != CertificateRequest) {
@@ -506,6 +541,11 @@ public func tlsEncodeServerKeyExchangeHandshake(message: TlsKeyExchangeMessage):
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(ServerKeyExchange, message.exchangeData))
 }
 
+/**
+ * tlsDecodeServerKeyExchangeHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeServerKeyExchangeHandshake(encoded: Array<Byte>): TlsKeyExchangeMessage {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != ServerKeyExchange) {
@@ -518,6 +558,11 @@ public func tlsEncodeClientKeyExchangeHandshake(message: TlsKeyExchangeMessage):
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(ClientKeyExchange, message.exchangeData))
 }
 
+/**
+ * tlsDecodeClientKeyExchangeHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeClientKeyExchangeHandshake(encoded: Array<Byte>): TlsKeyExchangeMessage {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != ClientKeyExchange) {
@@ -531,6 +576,11 @@ public func tlsEncodeCertificateHandshakeTls12(certificates: Array<Array<Byte>>)
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(Certificate, body))
 }
 
+/**
+ * tlsDecodeCertificateHandshakeTls12.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeCertificateHandshakeTls12(encoded: Array<Byte>): Array<Array<Byte>> {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != Certificate) {
@@ -544,6 +594,11 @@ public func tlsEncodeCertificateHandshakeTls13(message: Tls13CertificateMessage)
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(Certificate, body))
 }
 
+/**
+ * tlsDecodeCertificateHandshakeTls13.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeCertificateHandshakeTls13(encoded: Array<Byte>): Tls13CertificateMessage {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != Certificate) {
@@ -564,6 +619,11 @@ public func tlsEncodeCertificateVerifyHandshake(message: TlsCertificateVerifyMes
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(CertificateVerify, body))
 }
 
+/**
+ * tlsDecodeCertificateVerifyHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeCertificateVerifyHandshake(encoded: Array<Byte>): TlsCertificateVerifyMessage {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != CertificateVerify) {
@@ -582,6 +642,11 @@ public func tlsDecodeCertificateVerifyHandshake(encoded: Array<Byte>): TlsCertif
     TlsCertificateVerifyMessage(signatureScheme, signature)
 }
 
+/**
+ * tlsEncodeFinishedHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsEncodeFinishedHandshake(verifyData: Array<Byte>): Array<Byte> {
     if (verifyData.size == 0) {
         throw CryptoException(InvalidArgument, "TLS Finished verify_data must not be empty")
@@ -589,6 +654,11 @@ public func tlsEncodeFinishedHandshake(verifyData: Array<Byte>): Array<Byte> {
     tlsEncodeHandshakeFrame(TlsHandshakeFrame(Finished, verifyData))
 }
 
+/**
+ * tlsDecodeFinishedHandshake.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeFinishedHandshake(encoded: Array<Byte>): Array<Byte> {
     let frame = tlsDecodeHandshakeFrame(encoded)
     if (frame.msgType != Finished) {
@@ -624,6 +694,11 @@ public func tlsBuildServerNameExtension(hostName: String): TlsExtension {
     TlsExtension(TLS_EXT_SERVER_NAME, payload.toArray())
 }
 
+/**
+ * tlsParseServerNameExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsParseServerNameExtension(extension: TlsExtension): Array<String> {
     if (extension.extType != TLS_EXT_SERVER_NAME) {
         throw CryptoException(InvalidArgument, "extension is not server_name")
@@ -661,6 +736,11 @@ public func tlsParseServerNameExtension(extension: TlsExtension): Array<String> 
     hostNames.toArray()
 }
 
+/**
+ * tlsBuildAlpnExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsBuildAlpnExtension(protocols: Array<String>): TlsExtension {
     if (protocols.size == 0) {
         throw CryptoException(InvalidArgument, "TLS ALPN protocol list must not be empty")
@@ -687,6 +767,11 @@ public func tlsBuildAlpnExtension(protocols: Array<String>): TlsExtension {
     TlsExtension(TLS_EXT_ALPN, payload.toArray())
 }
 
+/**
+ * tlsParseAlpnExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsParseAlpnExtension(extension: TlsExtension): Array<String> {
     if (extension.extType != TLS_EXT_ALPN) {
         throw CryptoException(InvalidArgument, "extension is not ALPN")
@@ -738,6 +823,11 @@ public func tlsBuildOcspStatusRequestExtension(
     TlsExtension(TLS_EXT_STATUS_REQUEST, payload.toArray())
 }
 
+/**
+ * tlsParseOcspStatusRequestExtension.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsParseOcspStatusRequestExtension(extension: TlsExtension): TlsOcspStatusRequest {
     if (extension.extType != TLS_EXT_STATUS_REQUEST) {
         throw CryptoException(InvalidArgument, "extension is not status_request")

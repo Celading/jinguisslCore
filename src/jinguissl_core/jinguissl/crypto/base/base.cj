@@ -63,7 +63,12 @@ public class SecureBytes {
         _bytes.clone()
     }
 
-    public func setAt(index: Int64, value: Byte): Unit {
+    /**
+ * setAt.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func setAt(index: Int64, value: Byte): Unit {
         ensureAlive()
         if (index < 0 || index >= _bytes.size) {
             throw CryptoException(OutOfBounds, "index out of range")

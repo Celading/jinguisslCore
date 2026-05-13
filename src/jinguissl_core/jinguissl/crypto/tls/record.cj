@@ -321,7 +321,12 @@ public class TlsAeadRecordLayer {
         _readSequence = 0
     }
 
-    public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
+    /**
+ * seal.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
         if (plaintext.size > TLS_MAX_PLAINTEXT_LEN) {
             throw CryptoException(OutOfBounds, "TLS plaintext exceeds max fragment size")
         }
@@ -348,7 +353,12 @@ public class TlsAeadRecordLayer {
         )
     }
 
-    public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
+    /**
+ * open.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
         let record = tlsDecodeRecord(encodedRecord)
         if (record.header.version != version) {
             throw CryptoException(ParseError, "TLS record version mismatch")
@@ -390,7 +400,12 @@ public class TlsAeadRecordLayer {
         records.toArray()
     }
 
-    public func openAndReassemble(
+    /**
+ * openAndReassemble.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func openAndReassemble(
         encodedRecords: Array<Array<Byte>>,
         expectedContentType!: TlsContentType = ApplicationData
     ): Array<Byte> {
@@ -488,7 +503,12 @@ public class TlsChacha20Poly1305RecordLayer {
         _readSequence = 0
     }
 
-    public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
+    /**
+ * seal.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
         if (plaintext.size > TLS_MAX_PLAINTEXT_LEN) {
             throw CryptoException(OutOfBounds, "TLS plaintext exceeds max fragment size")
         }
@@ -509,7 +529,12 @@ public class TlsChacha20Poly1305RecordLayer {
         tlsEncodeRecord(contentType, version, payload)
     }
 
-    public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
+    /**
+ * open.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
         let record = tlsDecodeRecord(encodedRecord)
         if (record.header.version != version) {
             throw CryptoException(ParseError, "TLS record version mismatch")
@@ -548,7 +573,12 @@ public class TlsChacha20Poly1305RecordLayer {
         records.toArray()
     }
 
-    public func openAndReassemble(
+    /**
+ * openAndReassemble.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func openAndReassemble(
         encodedRecords: Array<Array<Byte>>,
         expectedContentType!: TlsContentType = ApplicationData
     ): Array<Byte> {
@@ -667,6 +697,11 @@ private func copyTlsBytesRange(
     }
 }
 
+/**
+ * tlsDecodeRecord.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeRecord(encodedRecord: Array<Byte>): TlsCipherRecord {
     if (encodedRecord.size < TLS_RECORD_HEADER_LEN) {
         throw CryptoException(ParseError, "TLS record is shorter than header")
@@ -691,6 +726,11 @@ public func tlsEncodeAlert(level: TlsAlertLevel, description: TlsAlertDescriptio
     [alertLevelToWire(level), alertDescriptionToWire(description)]
 }
 
+/**
+ * tlsDecodeAlert.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeAlert(encodedAlert: Array<Byte>): TlsAlertMessage {
     if (encodedAlert.size != 2) {
         throw CryptoException(ParseError, "TLS alert payload must be exactly 2 bytes")
@@ -708,6 +748,11 @@ public func tlsEncodeAlertRecord(
     tlsEncodeRecord(Alert, version, tlsEncodeAlert(level, description))
 }
 
+/**
+ * tlsDecodeAlertRecord.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsDecodeAlertRecord(encodedRecord: Array<Byte>): TlsAlertMessage {
     let record = tlsDecodeRecord(encodedRecord)
     if (record.header.contentType != Alert) {
@@ -720,6 +765,11 @@ public func tlsIsCloseNotifyAlert(alert: TlsAlertMessage): Bool {
     alert.description == CloseNotify
 }
 
+/**
+ * tlsRecordFragment.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tlsRecordFragment(plaintext: Array<Byte>, maxFragmentLen!: Int64 = TLS_MAX_PLAINTEXT_LEN): Array<Array<Byte>> {
     if (maxFragmentLen <= 0 || maxFragmentLen > TLS_MAX_PLAINTEXT_LEN) {
         throw CryptoException(InvalidArgument, "TLS max fragment length must be in [1, 16384]")

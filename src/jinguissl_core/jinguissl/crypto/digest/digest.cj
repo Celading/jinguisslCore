@@ -531,6 +531,11 @@ public func hkdfExtract(
     hmac(algorithm, effectiveSalt, ikm)
 }
 
+/**
+ * hkdfExpand.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func hkdfExpand(
     algorithm: HashAlgorithm,
     prk: Array<Byte>,

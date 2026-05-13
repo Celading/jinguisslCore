@@ -43,6 +43,11 @@ public func x25519PublicFromPrivate(privateKey: Array<Byte>): Array<Byte> {
     x25519ScalarMult(privateKey, X25519_BASEPOINT_U)
 }
 
+/**
+ * x25519DeriveSharedSecret.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x25519DeriveSharedSecret(privateKey: Array<Byte>, peerPublicKey: Array<Byte>): Array<Byte> {
     x25519ValidatePublicKey(peerPublicKey)
     let shared = x25519ScalarMult(privateKey, peerPublicKey)
@@ -52,6 +57,11 @@ public func x25519DeriveSharedSecret(privateKey: Array<Byte>, peerPublicKey: Arr
     shared
 }
 
+/**
+ * x25519ScalarMult.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func x25519ScalarMult(privateKey: Array<Byte>, uCoordinate: Array<Byte>): Array<Byte> {
     x25519RequireKeyLength(privateKey, "X25519 private key")
     x25519RequireKeyLength(uCoordinate, "X25519 u-coordinate")

@@ -54,6 +54,11 @@ public func tls13BuildHttpClientHelloX25519(
     tls13BuildHttpClientHelloFromBase(baseHello, serverName, alpnProtocols)
 }
 
+/**
+ * tls13BuildHttpServerHandshakeContextEcdheP256.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildHttpServerHandshakeContextEcdheP256(
     encodedClientHello: Array<Byte>,
     serverKeyExchangePrivate: EcPrivateKey,
@@ -80,6 +85,11 @@ public func tls13BuildHttpServerHandshakeContextEcdheP256(
     context
 }
 
+/**
+ * tls13BuildHttpServerHandshakeContextEcdheP384.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13BuildHttpServerHandshakeContextEcdheP384(
     encodedClientHello: Array<Byte>,
     serverKeyExchangePrivate: EcPrivateKey,
@@ -270,6 +280,11 @@ public func tls13ProcessHttpClientAuthFlightForServerContextWithRequirement(
     )
 }
 
+/**
+ * tls13ProcessHttpClientAuthFlightForServerContextRequired.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
 public func tls13ProcessHttpClientAuthFlightForServerContextRequired(
     context: Tls13ServerClientAuthContext,
     clientAuthFlight: Tls13AuthFlight,
