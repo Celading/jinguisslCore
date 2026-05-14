@@ -432,19 +432,20 @@ private func scalarMul(point: AffinePoint, scalar: BigNum, params: CurveParams):
         return AffinePoint.infinityPoint()
     }
 
-    var k = scalar.toBigInt()
+    let orderBits = bitLength(params.n)
+    let k = scalar.toBigInt()
     let zero = BigInt(0)
-    let two = BigInt(2)
-
+    let one = BigInt(1)
     var result = AffinePoint.infinityPoint()
     var addend = point
+    var bitIndex = Int64(0)
 
-    while (k > zero) {
-        if ((k % two) != zero) {
+    while (bitIndex < orderBits) {
+        if (((k >> bitIndex) & one) != zero) {
             result = pointAdd(result, addend, params)
         }
         addend = pointDouble(addend, params)
-        k = k >> 1
+        bitIndex += 1
     }
     result
 }

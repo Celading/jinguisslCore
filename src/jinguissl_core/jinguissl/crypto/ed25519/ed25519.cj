@@ -190,20 +190,35 @@ private func scalarMul(point: Ed25519Point, scalar: BigInt): Ed25519Point {
         return Ed25519Point.identity()
     }
 
+    let orderBits = bitLengthBigInt(ED25519_ORDER_L)
     let zero = BigInt(0)
-    let two = BigInt(2)
-    var k = scalar
+    let one = BigInt(1)
     var result = Ed25519Point.identity()
     var addend = point
+    var bitIndex = Int64(0)
 
-    while (k > zero) {
-        if ((k % two) != zero) {
+    while (bitIndex < orderBits) {
+        if (((scalar >> bitIndex) & one) != zero) {
             result = pointAdd(result, addend)
         }
         addend = pointAdd(addend, addend)
-        k = k >> 1
+        bitIndex += 1
     }
     result
+}
+
+private func bitLengthBigInt(value: BigInt): Int64 {
+    let bytes = BigNum(value).toBytesBE()
+    if (bytes.size == 0 || (bytes.size == 1 && bytes[0] == UInt8(0))) {
+        return 0
+    }
+    var top = UInt8(bytes[0])
+    var topBits: Int64 = 0
+    while (top != UInt8(0)) {
+        top = top >> 1
+        topBits += 1
+    }
+    (bytes.size - 1) * 8 + topBits
 }
 
 private func sqrtModP(value: BigInt): BigInt {
