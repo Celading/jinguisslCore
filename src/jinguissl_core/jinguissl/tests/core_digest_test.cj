@@ -109,5 +109,78 @@ public class CoreDigestTestSuite {
         @Assert(hash(HashAlgorithm.SHA256, [0x00]).size, 32)
         @Assert(hash(HashAlgorithm.SHA384, [0x00]).size, 48)
         @Assert(hash(HashAlgorithm.SHA512, [0x00]).size, 64)
+        }
+
+        @TestCase
+        public func testHmacSha256KnownVector(): Unit {
+            let key: Array<Byte> = [0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b]
+            let data: Array<Byte> = [0x48, 0x69, 0x20, 0x54, 0x68, 0x65, 0x72, 0x65] // "Hi There"
+            let expected = "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+            let result = hmac(HashAlgorithm.SHA256, key, data)
+            @Assert(bytesToHexLower(result), expected)
+        }
+
+        @TestCase
+        public func testHmacSha1KnownVector(): Unit {
+            let key: Array<Byte> = [0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b]
+            let data: Array<Byte> = [0x48, 0x69, 0x20, 0x54, 0x68, 0x65, 0x72, 0x65] // "Hi There"
+            let expected = "b617318655057264e28bc0b6fb378c8ef146be00"
+            let result = hmac(HashAlgorithm.SHA1, key, data)
+            @Assert(bytesToHexLower(result), expected)
+        }
+
+        @TestCase
+        public func testHkdfExtractExpandRoundtrip(): Unit {
+            let ikm: Array<Byte> = [0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b]
+            let salt: Array<Byte> = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                      0x08, 0x09, 0x0a, 0x0b, 0x0c]
+            let info: Array<Byte> = [0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
+                                      0xf8, 0xf9]
+            let prk = hkdfExtract(HashAlgorithm.SHA256, salt, ikm)
+            @Assert(prk.size > 0, true)
+            let okm = hkdfExpand(HashAlgorithm.SHA256, prk, info, 42)
+            @Assert(okm.size, 42)
+        }
+
+        @TestCase
+        public func testHkdfFull(): Unit {
+            let ikm: Array<Byte> = [0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b]
+            let salt: Array<Byte> = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                      0x08, 0x09, 0x0a, 0x0b, 0x0c]
+            let info: Array<Byte> = [0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
+                                      0xf8, 0xf9]
+            let okm = hkdf(HashAlgorithm.SHA256, ikm, info, 42, salt: salt)
+            @Assert(okm.size, 42)
+        }
+
+        @TestCase
+        public func testHkdfEmptySalt(): Unit {
+            let prk = hkdfExtract(HashAlgorithm.SHA256, [], [0x01, 0x02])
+            @Assert(prk.size, 32)
+        }
+
+        @TestCase
+        public func testHkdfExpandZeroOutput(): Unit {
+            let prk = Array<Byte>(32, repeat: 0xab)
+            let result = hkdfExpand(HashAlgorithm.SHA256, prk, [], 0)
+            @Assert(result.size, 0)
+        }
+
+        @TestCase
+        public func testHmacSha256CopyProtection(): Unit {
+            let key: Array<Byte> = [0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b,
+                                     0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b]
+            let data: Array<Byte> = [0x48, 0x69, 0x20, 0x54, 0x68, 0x65, 0x72, 0x65]
+            let result1 = hmac(HashAlgorithm.SHA256, key, data)
+            let result2 = hmac(HashAlgorithm.SHA256, key, data)
+            @Assert(bytesToHexLower(result1), bytesToHexLower(result2))
+        }
     }
-}
