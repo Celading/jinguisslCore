@@ -24,6 +24,7 @@ private let RSA_SMALL_PRIMES: Array<Int64> = [
 ]
 
 public enum RsaSignatureScheme <: Equatable<RsaSignatureScheme> & ToString {
+    /** @deprecated RSA-PKCS1v1.5 is vulnerable to Bleichenbacher attacks. Use RSA-PSS instead. */
     | PKCS1v15
     | PSS
 

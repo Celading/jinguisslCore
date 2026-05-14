@@ -5,7 +5,9 @@ import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.{bytesToUInt32BE, bytesToUInt32LE, secureCopyInto, uInt32ToBytesBE, uInt32ToBytesLE}
 
 public enum HashAlgorithm <: Equatable<HashAlgorithm> & ToString {
+    /** @deprecated MD5 is cryptographically broken. Only for legacy compatibility. */
     | MD5
+    /** @deprecated SHA-1 is cryptographically broken. Use SHA-256 or higher. */
     | SHA1
     | SHA256
     | SHA384
@@ -50,6 +52,7 @@ public func hash(algorithm: HashAlgorithm, data: Array<Byte>): Array<Byte> {
     }
 }
 
+/** @deprecated MD5 is cryptographically broken. Only for legacy compatibility. */
 @OverflowWrapping
 public func md5(data: Array<Byte>): Array<Byte> {
     let message = padForMd5(data)
@@ -120,6 +123,7 @@ public func md5(data: Array<Byte>): Array<Byte> {
 }
 
 @OverflowWrapping
+/** @deprecated SHA-1 is cryptographically broken. Use SHA-256 or higher. */
 public func sha1(data: Array<Byte>): Array<Byte> {
     let message = padForSha(data, 64)
 

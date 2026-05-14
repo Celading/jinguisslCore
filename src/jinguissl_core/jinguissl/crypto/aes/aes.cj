@@ -6,6 +6,7 @@ import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.secureCopyInto
 
 public enum AesMode <: Equatable<AesMode> & ToString {
+    /** @deprecated ECB mode is not semantically secure. Use GCM or CBC. */
     | ECB
     | CBC
     | CTR
@@ -40,6 +41,7 @@ public enum AesMode <: Equatable<AesMode> & ToString {
 
 public enum AesEngineKind <: Equatable<AesEngineKind> & ToString {
     | AUTO
+    /** @deprecated Software AES is vulnerable to cache-timing side channels. Use HARDWARE when possible. */
     | SOFTWARE
     | HARDWARE
 
