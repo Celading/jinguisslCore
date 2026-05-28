@@ -46,8 +46,8 @@
 # GitHub mirror
 jinguissl_core = { git = "https://github.com/Celading/jinguisslCore" }
 
-# AtomGit mirror
-# jinguissl_core = { git = "https://atomgit.com/CjKu/Jingui-Core" }
+# GitCode mirror
+# jinguissl_core = { git = "https://gitcode.com/CjKu/Jingui-Core.git" }
 
 # Local sibling checkout for family development
 # jinguissl_core = { path = "../JinguiSSL-core" }
