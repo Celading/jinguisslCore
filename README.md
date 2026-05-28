@@ -2,6 +2,7 @@
   <img src="https://img.shields.io/badge/Cangjie-JinguiSSL%20Core-c96b2c?style=for-the-badge&labelColor=1f2430" alt="JinguiSSL Core" />
   <img src="https://img.shields.io/badge/package-static-2f855a?style=for-the-badge&labelColor=1f2430" alt="Static Package" />
   <img src="https://img.shields.io/badge/focus-crypto%20%2B%20protocol-3182ce?style=for-the-badge&labelColor=1f2430" alt="Crypto and Protocol" />
+  <img src="https://img.shields.io/badge/license-Apache%202.0-1f9d55?style=for-the-badge&labelColor=1f2430" alt="Apache 2.0" />
 </p>
 <div align="center">
 <span style="font-weight:300;font-size:36px">JinguiSSL Core</span><br/>
@@ -37,9 +38,12 @@
 
 ### 依赖
 
+当前更推荐以 sibling checkout 的方式直接引用。  
+公开托管地址与统一文档站后续会再统一收口到独立文档面，因此这里不再保留占位的假 `git` 地址。
+
 ```toml
 [dependencies]
-jinguissl_core = { git = "https://your-host/JinguiSSL-core" }
+jinguissl_core = { path = "../JinguiSSL-core" }
 ```
 
 ### 示例：Ed25519 签名与验签
@@ -111,3 +115,6 @@ JinguiSSL-core/
 - 框架或中间件的安全核心
 - 仓颉生态里可复用的协议与密码能力底座
 
+## 许可证
+
+本项目采用 `Apache License 2.0`。详见 `LICENSE`。
