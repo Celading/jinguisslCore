@@ -38,12 +38,19 @@
 
 ### 依赖
 
-当前更推荐以 sibling checkout 的方式直接引用。  
-公开托管地址与统一文档站后续会再统一收口到独立文档面，因此这里不再保留占位的假 `git` 地址。
+当前已经有可用的 hosted mirror，可直接按需引用。  
+如果你在同一工作区内做 family 联调，也仍然可以继续用 sibling checkout。
 
 ```toml
 [dependencies]
-jinguissl_core = { path = "../JinguiSSL-core" }
+# GitHub mirror
+jinguissl_core = { git = "https://github.com/Celading/jinguisslCore" }
+
+# AtomGit mirror
+# jinguissl_core = { git = "https://atomgit.com/CjKu/Jingui-Core" }
+
+# Local sibling checkout for family development
+# jinguissl_core = { path = "../JinguiSSL-core" }
 ```
 
 ### 示例：Ed25519 签名与验签
