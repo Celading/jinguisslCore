@@ -343,7 +343,7 @@ public class SshHostVerificationPolicy {
     public init(
         negotiatedHostKeyAlgorithm!: String = "",
         expectedHostKeySha256!: Array<Byte> = [],
-        requireKnownHost!: Bool = true,
+        requireKnownHost!: Bool = false,
         requireHostSignature!: Bool = true,
         allowLegacyRsaSha1!: Bool = false
     ) {

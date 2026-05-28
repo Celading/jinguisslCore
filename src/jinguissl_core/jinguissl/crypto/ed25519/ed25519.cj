@@ -190,7 +190,7 @@ private func scalarMul(point: Ed25519Point, scalar: BigInt): Ed25519Point {
         return Ed25519Point.identity()
     }
 
-    let orderBits = bitLengthBigInt(ED25519_ORDER_L)
+    let orderBits = bitLengthBigInt(scalar)
     let zero = BigInt(0)
     let one = BigInt(1)
     var result = Ed25519Point.identity()
