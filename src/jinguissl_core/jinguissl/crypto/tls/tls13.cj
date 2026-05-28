@@ -1466,7 +1466,7 @@ public func tls13BuildServerHandshakeContextEcdheP256(
     )
     let transcriptHash = sha256(concat(concat(encodedClientHello, serverHello), encryptedExtensions))
     let clientPublicKey = tls13ExtractClientKeyShare(encodedClientHello)
-    let secrets = tls13DeriveSecretsFromEcdhe(
+    let firstSecrets = tls13DeriveSecretsFromEcdhe(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
@@ -1476,9 +1476,23 @@ public func tls13BuildServerHandshakeContextEcdheP256(
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
         transcriptHash,
-        secrets.serverHsTrafficSecret,
+        firstSecrets.serverHsTrafficSecret,
         certificatePrivateKeyEcdsa,
         certificatePrivateKeyRsa
+    )
+
+    // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
+    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+        encodedClientHello, serverHello), encryptedExtensions),
+        authFlight.certificateHandshake), authFlight.certificateVerifyHandshake),
+        authFlight.finishedHandshake))
+    let secrets = tls13DeriveSecretsFromEcdhe(
+        serverKeyExchangePrivate,
+        clientPublicKey,
+        transcriptHash,
+        appTranscriptHash: fullTranscriptHash,
+        keyLen: keyLen,
+        ivLen: ivLen
     )
 
     let flight = Tls13ServerHandshakeFlight(
@@ -1525,7 +1539,7 @@ public func tls13BuildServerHandshakeContextEcdheP384(
     )
     let transcriptHash = sha256(concat(concat(encodedClientHello, serverHello), encryptedExtensions))
     let clientPublicKey = tls13ExtractClientKeyShare(encodedClientHello)
-    let secrets = tls13DeriveSecretsFromEcdhe(
+    let firstSecrets = tls13DeriveSecretsFromEcdhe(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
@@ -1535,9 +1549,23 @@ public func tls13BuildServerHandshakeContextEcdheP384(
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
         transcriptHash,
-        secrets.serverHsTrafficSecret,
+        firstSecrets.serverHsTrafficSecret,
         certificatePrivateKeyEcdsa,
         certificatePrivateKeyRsa
+    )
+
+    // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
+    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+        encodedClientHello, serverHello), encryptedExtensions),
+        authFlight.certificateHandshake), authFlight.certificateVerifyHandshake),
+        authFlight.finishedHandshake))
+    let secrets = tls13DeriveSecretsFromEcdhe(
+        serverKeyExchangePrivate,
+        clientPublicKey,
+        transcriptHash,
+        appTranscriptHash: fullTranscriptHash,
+        keyLen: keyLen,
+        ivLen: ivLen
     )
 
     let flight = Tls13ServerHandshakeFlight(
@@ -1576,7 +1604,7 @@ public func tls13BuildServerHandshakeContextX25519(
     )
     let transcriptHash = sha256(concat(concat(encodedClientHello, serverHello), encryptedExtensions))
     let clientPublicKey = tls13ExtractClientX25519KeyShare(encodedClientHello)
-    let secrets = tls13DeriveSecretsFromX25519(
+    let firstSecrets = tls13DeriveSecretsFromX25519(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
@@ -1586,9 +1614,23 @@ public func tls13BuildServerHandshakeContextX25519(
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
         transcriptHash,
-        secrets.serverHsTrafficSecret,
+        firstSecrets.serverHsTrafficSecret,
         certificatePrivateKeyEcdsa,
         certificatePrivateKeyRsa
+    )
+
+    // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
+    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+        encodedClientHello, serverHello), encryptedExtensions),
+        authFlight.certificateHandshake), authFlight.certificateVerifyHandshake),
+        authFlight.finishedHandshake))
+    let secrets = tls13DeriveSecretsFromX25519(
+        serverKeyExchangePrivate,
+        clientPublicKey,
+        transcriptHash,
+        appTranscriptHash: fullTranscriptHash,
+        keyLen: keyLen,
+        ivLen: ivLen
     )
 
     let flight = Tls13ServerHandshakeFlight(
@@ -1728,6 +1770,12 @@ public func tls13ProcessServerHandshakeFlightEcdheP256(
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
 
+    // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
+    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+        encodedClientHello, flight.serverHello), flight.encryptedExtensions),
+        flight.authFlight.certificateHandshake), flight.authFlight.certificateVerifyHandshake),
+        flight.authFlight.finishedHandshake))
+
     let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHello.cipherSuite)
     let serverPublicKey = tls13ExtractServerKeyShare(flight.serverHello)
@@ -1735,6 +1783,7 @@ public func tls13ProcessServerHandshakeFlightEcdheP256(
         clientKeyExchangePrivate,
         serverPublicKey,
         transcriptHash,
+        appTranscriptHash: fullTranscriptHash,
         keyLen: keyLen,
         ivLen: ivLen
     )
@@ -1775,6 +1824,12 @@ public func tls13ProcessServerHandshakeFlightEcdheP384(
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
 
+    // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
+    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+        encodedClientHello, flight.serverHello), flight.encryptedExtensions),
+        flight.authFlight.certificateHandshake), flight.authFlight.certificateVerifyHandshake),
+        flight.authFlight.finishedHandshake))
+
     let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHello.cipherSuite)
     let serverPublicKey = tls13ExtractServerKeyShare(flight.serverHello)
@@ -1782,6 +1837,7 @@ public func tls13ProcessServerHandshakeFlightEcdheP384(
         clientKeyExchangePrivate,
         serverPublicKey,
         transcriptHash,
+        appTranscriptHash: fullTranscriptHash,
         keyLen: keyLen,
         ivLen: ivLen
     )
@@ -1819,6 +1875,12 @@ public func tls13ProcessServerHandshakeFlightX25519(
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
 
+    // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
+    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+        encodedClientHello, flight.serverHello), flight.encryptedExtensions),
+        flight.authFlight.certificateHandshake), flight.authFlight.certificateVerifyHandshake),
+        flight.authFlight.finishedHandshake))
+
     let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHello.cipherSuite)
     let serverPublicKey = tls13ExtractServerX25519KeyShare(flight.serverHello)
@@ -1826,6 +1888,7 @@ public func tls13ProcessServerHandshakeFlightX25519(
         clientKeyExchangePrivate,
         serverPublicKey,
         transcriptHash,
+        appTranscriptHash: fullTranscriptHash,
         keyLen: keyLen,
         ivLen: ivLen
     )
@@ -2178,7 +2241,8 @@ public func tls13DeriveSecretsFromEcdhe(
     peerPublicKey: EcPublicKey,
     transcriptHash: Array<Byte>,
     keyLen!: Int64 = TLS13_DEFAULT_AEAD_KEY_LEN,
-    ivLen!: Int64 = TLS13_DEFAULT_AEAD_IV_LEN
+    ivLen!: Int64 = TLS13_DEFAULT_AEAD_IV_LEN,
+    appTranscriptHash!: Array<Byte> = []   // RFC 8446 §7.1: override for app traffic keys
 ): Tls13HandshakeSecrets {
     if (privateKey.curve != peerPublicKey.curve) {
         throw CryptoException(InvalidArgument, "TLS1.3 ECDHE key curve mismatch")
@@ -2193,20 +2257,22 @@ public func tls13DeriveSecretsFromEcdhe(
     let earlySecret = tls13HkdfExtract(zeros, zeros)
     let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
     let handshakeSecret = tls13HkdfExtract(derivedEarly, sharedSecret)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen)
+    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
 }
 
 public func tls13DeriveSecretsFromEcdheForCipherSuite(
     privateKey: EcPrivateKey,
     peerPublicKey: EcPublicKey,
     transcriptHash: Array<Byte>,
-    cipherSuite: Int64
+    cipherSuite: Int64,
+    appTranscriptHash!: Array<Byte> = []
 ): Tls13HandshakeSecrets {
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
     tls13DeriveSecretsFromEcdhe(
         privateKey,
         peerPublicKey,
         transcriptHash,
+        appTranscriptHash: appTranscriptHash,
         keyLen: keyLen,
         ivLen: ivLen
     )
@@ -2217,7 +2283,8 @@ public func tls13DeriveSecretsFromX25519(
     peerPublicKey: Array<Byte>,
     transcriptHash: Array<Byte>,
     keyLen!: Int64 = TLS13_DEFAULT_AEAD_KEY_LEN,
-    ivLen!: Int64 = TLS13_DEFAULT_AEAD_IV_LEN
+    ivLen!: Int64 = TLS13_DEFAULT_AEAD_IV_LEN,
+    appTranscriptHash!: Array<Byte> = []   // RFC 8446 §7.1: override for app traffic keys
 ): Tls13HandshakeSecrets {
     tls13RequireHashAndLengths(transcriptHash, keyLen, ivLen)
 
@@ -2228,20 +2295,22 @@ public func tls13DeriveSecretsFromX25519(
     let earlySecret = tls13HkdfExtract(zeros, zeros)
     let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
     let handshakeSecret = tls13HkdfExtract(derivedEarly, sharedSecret)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen)
+    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
 }
 
 public func tls13DeriveSecretsFromX25519ForCipherSuite(
     privateKey: Array<Byte>,
     peerPublicKey: Array<Byte>,
     transcriptHash: Array<Byte>,
-    cipherSuite: Int64
+    cipherSuite: Int64,
+    appTranscriptHash!: Array<Byte> = []
 ): Tls13HandshakeSecrets {
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
     tls13DeriveSecretsFromX25519(
         privateKey,
         peerPublicKey,
         transcriptHash,
+        appTranscriptHash: appTranscriptHash,
         keyLen: keyLen,
         ivLen: ivLen
     )
@@ -2255,6 +2324,7 @@ public func tls13DeriveSecretsFromX25519ForCipherSuite(
 public func tls13DeriveSecretsFromPsk(
     psk: Array<Byte>,
     transcriptHash: Array<Byte>,
+    appTranscriptHash!: Array<Byte> = [],
     keyLen!: Int64 = TLS13_DEFAULT_AEAD_KEY_LEN,
     ivLen!: Int64 = TLS13_DEFAULT_AEAD_IV_LEN
 ): Tls13HandshakeSecrets {
@@ -2268,18 +2338,20 @@ public func tls13DeriveSecretsFromPsk(
     let earlySecret = tls13HkdfExtract(zeros, psk)
     let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
     let handshakeSecret = tls13HkdfExtract(derivedEarly, zeros)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen)
+    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
 }
 
 public func tls13DeriveSecretsFromPskForCipherSuite(
     psk: Array<Byte>,
     transcriptHash: Array<Byte>,
-    cipherSuite: Int64
+    cipherSuite: Int64,
+    appTranscriptHash!: Array<Byte> = []
 ): Tls13HandshakeSecrets {
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
     tls13DeriveSecretsFromPsk(
         psk,
         transcriptHash,
+        appTranscriptHash: appTranscriptHash,
         keyLen: keyLen,
         ivLen: ivLen
     )
@@ -2295,7 +2367,8 @@ public func tls13DeriveSecretsFromPskAndX25519ForCipherSuite(
     privateKey: Array<Byte>,
     peerPublicKey: Array<Byte>,
     transcriptHash: Array<Byte>,
-    cipherSuite: Int64
+    cipherSuite: Int64,
+    appTranscriptHash!: Array<Byte> = []
 ): Tls13HandshakeSecrets {
     if (psk.size == 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 PSK must not be empty")
@@ -2309,7 +2382,7 @@ public func tls13DeriveSecretsFromPskAndX25519ForCipherSuite(
     let earlySecret = tls13HkdfExtract(zeros, psk)
     let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
     let handshakeSecret = tls13HkdfExtract(derivedEarly, sharedSecret)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen)
+    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
 }
 
 /**
@@ -2886,8 +2959,11 @@ private func tls13BuildSecretsFromStages(
     handshakeSecret: Array<Byte>,
     transcriptHash: Array<Byte>,
     keyLen: Int64,
-    ivLen: Int64
+    ivLen: Int64,
+    appTranscriptHash!: Array<Byte> = []   // RFC 8446 §7.1: app traffic keys use Hello…Finished transcript; empty = use transcriptHash
 ): Tls13HandshakeSecrets {
+    // Use appTranscriptHash if provided (non-empty), otherwise fall back to transcriptHash
+    let appHash = if (appTranscriptHash.size > 0) { appTranscriptHash } else { transcriptHash }
     let emptyHash = sha256([])
     let zeros = Array<Byte>(TLS13_HASH_LEN, repeat: 0)
 
@@ -2897,8 +2973,8 @@ private func tls13BuildSecretsFromStages(
     let derivedHandshake = tls13DeriveSecret(handshakeSecret, "derived", emptyHash)
     let masterSecret = tls13HkdfExtract(derivedHandshake, zeros)
 
-    let clientAppTrafficSecret = tls13DeriveSecret(masterSecret, "c ap traffic", transcriptHash)
-    let serverAppTrafficSecret = tls13DeriveSecret(masterSecret, "s ap traffic", transcriptHash)
+    let clientAppTrafficSecret = tls13DeriveSecret(masterSecret, "c ap traffic", appHash)
+    let serverAppTrafficSecret = tls13DeriveSecret(masterSecret, "s ap traffic", appHash)
 
     let clientWriteKey = tls13HkdfExpandLabel(clientAppTrafficSecret, "key", [], keyLen)
     let serverWriteKey = tls13HkdfExpandLabel(serverAppTrafficSecret, "key", [], keyLen)

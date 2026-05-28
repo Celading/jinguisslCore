@@ -5,5 +5,6 @@
   output-type = "static"
   src-dir = "src/jinguissl_core"
   compile-option = "-Woff unused"
-  description = "Jingui family core foundation slice extracted into Cangku"
+  description = "Cangjie cryptography core with X.509, TLS, and SSH protocol primitives"
   include = ["src"]
+
