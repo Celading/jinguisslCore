@@ -670,7 +670,6 @@ public class SshPacketProtectionLayer {
     }
 }
 
-// APP_LAYER_ORCHESTRATION: mirrored under _helper/ssh/source_snapshots/jinguissl/crypto/ssh/ssh.cj.txt
 public class SshHandshakeCoordinator {
     public let role: SshPeerRole
     public let negotiated: SshNegotiatedAlgorithms
