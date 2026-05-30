@@ -114,7 +114,7 @@ public func x25519ScalarMult(privateKey: Array<Byte>, uCoordinate: Array<Byte>):
     z3 = nz3
 
     let inv = try {
-        z2.modInverse(X25519_P)
+        z2.modInversePrimeFixedSchedule(X25519_P, 255)
     } catch (_: CryptoException) {
         throw CryptoException(ParseError, "X25519 scalar multiplication result is not invertible")
     }
