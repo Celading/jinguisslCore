@@ -230,6 +230,52 @@ public func modInverse(modulus: BigNum): BigNum {
     }
 
     /**
+ * modInversePrimeFixedSchedule.
+ *
+ * Fixed-round prime-modulus inversion via Fermat: this^(p - 2) mod p.
+ *
+ * This avoids BigInt.modInverse and BigInt.modPow, but it is not a
+ * constant-time certificate. The exponent comes from the public prime modulus,
+ * while BigInt multiplication, modulo, allocation, and the public-exponent bit
+ * branch remain outside JinguiSSL's constant-time control.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func modInversePrimeFixedSchedule(primeModulus: BigNum, bitLength: Int64): BigNum {
+        let p = abs(primeModulus._value)
+        if (p <= BigInt(1)) {
+            throw CryptoException(InvalidArgument, "prime modulus must be > 1")
+        }
+        if (!isOdd(p)) {
+            throw CryptoException(InvalidArgument, "prime modulus must be odd")
+        }
+        if (bitLength <= 0) {
+            throw CryptoException(InvalidArgument, "bitLength must be > 0")
+        }
+
+        let two = BigInt(2)
+        let exponent = p - two
+        let zero = BigInt(0)
+        var result = BigInt(1)
+        var base = normalizeMod(_value, p)
+        if (base == zero) {
+            throw CryptoException(NoModInverse, "mod inverse does not exist")
+        }
+
+        var i: Int64 = 0
+        while (i < bitLength) {
+            let multiplied = (result * base) % p
+            if (((exponent >> i) % two) != zero) {
+                result = multiplied
+            }
+            base = (base * base) % p
+            i += 1
+        }
+
+        BigNum(result)
+    }
+
+    /**
  * lshift.
  *
  * @throws CryptoException 当操作失败时抛出
