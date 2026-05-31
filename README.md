@@ -38,12 +38,11 @@
 
 ### 依赖
 
-当前更推荐以 sibling checkout 的方式直接引用。  
-公开托管地址与统一文档站后续会再统一收口到独立文档面，因此这里不再保留占位的假 `git` 地址。
+公开仓库默认使用远程 Git 依赖；本地 sibling checkout 仅建议作为开发时的临时覆盖。
 
 ```toml
 [dependencies]
-jinguissl_core = { path = "../JinguiSSL-core" }
+jinguissl_core = { git = "https://gitcode.com/CjKu/Jingui-Core.git" }
 ```
 
 ### 示例：Ed25519 签名与验签
