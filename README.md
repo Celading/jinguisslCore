@@ -42,7 +42,7 @@
 
 ```toml
 [dependencies]
-jinguissl_core = { git = "https://gitcode.com/CjKu/Jingui-Core.git" }
+jinguissl_core = { git = "https://gitcode.com/CjKu/JinguiCore.git" }
 ```
 
 ### 示例：Ed25519 签名与验签
