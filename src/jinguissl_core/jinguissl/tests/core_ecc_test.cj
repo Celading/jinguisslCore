@@ -77,6 +77,16 @@ public class CoreEccTestSuite {
     }
 
     @TestCase
+    public func testEcdsaP521SignVerify(): Unit {
+        assertEcdsaSignVerify(P521, BigNum.one(), TEST_DIGEST_HEX)
+    }
+
+    @TestCase
+    public func testEcdsaSecp256k1SignVerify(): Unit {
+        assertEcdsaSignVerify(SECP256K1, BigNum.one(), TEST_DIGEST_HEX)
+    }
+
+    @TestCase
     public func testEcdsaP256VerifyVector1(): Unit {
         let pub = EcPublicKey(
             P256,
@@ -128,6 +138,15 @@ public class CoreEccTestSuite {
             case None => @Fail("expected error code")
         }
     }
+}
+
+private func assertEcdsaSignVerify(curve: NamedCurve, scalar: BigNum, digestHex: String): Unit {
+    let privateKey = EcPrivateKey(curve, scalar)
+    let publicKey = ecPublicFromPrivateKey(privateKey)
+    let digest = hexToBytes(digestHex)
+    let (r, s) = ecdsaSign(privateKey, digest)
+    @Assert(ecdsaVerify(publicKey, digest, r, s), true)
+    @Assert(ecdsaVerify(publicKey, digest, r.add(BigNum.one()), s), false)
 }
 
 private func encodeDerSignature(r: BigNum, s: BigNum): Array<Byte> {
