@@ -124,6 +124,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
     let z = digestToCurveScalar(digest, params.n)
     let g = AffinePoint(params.gx, params.gy)
     let scalarBytes = fieldByteLength(params.n)
+    let orderBits = bitLength(params.n)
 
     var attempt = 0
     while (attempt < 128) {
@@ -147,7 +148,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
         }
 
         let kInv = try {
-            k.modInverse(params.n)
+            k.modInversePrimeFixedSchedule(params.n, orderBits)
         } catch (_: CryptoException) {
             attempt += 1
             continue
@@ -177,9 +178,10 @@ public func ecdsaVerify(publicKey: EcPublicKey, digest: Array<Byte>, r: BigNum, 
     }
 
     let z = digestToCurveScalar(digest, params.n)
+    let orderBits = bitLength(params.n)
 
     let w = try {
-        s.modInverse(params.n)
+        s.modInversePrimeFixedSchedule(params.n, orderBits)
     } catch (_: CryptoException) {
         return false
     }
