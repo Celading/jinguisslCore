@@ -231,7 +231,7 @@ public func ecPublicFromPrivateKey(privateKey: EcPrivateKey): EcPublicKey {
     let params = paramsForCurve(privateKey.curve)
     let scalar = normalizeScalar(privateKey.scalar, params.n)
     let g = AffinePoint(params.gx, params.gy)
-    let publicPoint = scalarMul(g, scalar, params)
+    let publicPoint = scalarMulProjectivePoint(g, scalar, params)
     if (publicPoint.infinity) {
         throw CryptoException(InvalidArgument, "EC public key derivation returned point at infinity")
     }
