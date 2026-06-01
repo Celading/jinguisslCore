@@ -1,5 +1,6 @@
 package jinguissl_core.jinguissl.crypto.x25519
 
+import std.math.numeric.BigInt
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.jinguissl.crypto.utils.csprngBytes
@@ -78,14 +79,12 @@ public func x25519ScalarMult(privateKey: Array<Byte>, uCoordinate: Array<Byte>):
     while (bit >= 0) {
         let kBit = scalarBit(scalar, bit)
         let shouldSwap = swapBit ^ kBit
-        if (shouldSwap != 0) {
-            let tx = x2
-            x2 = x3
-            x3 = tx
-            let tz = z2
-            z2 = z3
-            z3 = tz
-        }
+        let (nx2, nx3) = cswap(shouldSwap, x2, x3)
+        let (nz2, nz3) = cswap(shouldSwap, z2, z3)
+        x2 = nx2
+        x3 = nx3
+        z2 = nz2
+        z3 = nz3
         swapBit = kBit
 
         let a = modP(x2.add(z2))
@@ -107,21 +106,32 @@ public func x25519ScalarMult(privateKey: Array<Byte>, uCoordinate: Array<Byte>):
         bit -= 1
     }
 
-    if (swapBit != 0) {
-        let tx = x2
-        x2 = x3
-        x3 = tx
-        let tz = z2
-        z2 = z3
-        z3 = tz
-    }
+    let (nx2, nx3) = cswap(swapBit, x2, x3)
+    let (nz2, nz3) = cswap(swapBit, z2, z3)
+    x2 = nx2
+    x3 = nx3
+    z2 = nz2
+    z3 = nz3
 
     let inv = try {
-        z2.modInverse(X25519_P)
+        z2.modInversePrimeFixedSchedule(X25519_P, 255)
     } catch (_: CryptoException) {
         throw CryptoException(ParseError, "X25519 scalar multiplication result is not invertible")
     }
     encodeLittleEndian(modP(x2.mul(inv)), X25519_SHARED_SECRET_LEN)
+}
+
+/**
+ * cswap — branchless conditional swap.
+ *
+ * Returns (left, right) when swap is 0, and (right, left) when swap is 1.
+ * Always computes both outcomes and selects via arithmetic; no data-dependent
+ * branch on the swap bit.
+ */
+private func cswap(swap: Int64, left: BigNum, right: BigNum): (BigNum, BigNum) {
+    let s = BigNum(BigInt(swap))
+    let ns = BigNum(BigInt(1 - swap))
+    (left.mul(ns).add(right.mul(s)), left.mul(s).add(right.mul(ns)))
 }
 
 private func modReduceUCoordinate(value: Array<Byte>): Array<Byte> {

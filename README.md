@@ -38,19 +38,11 @@
 
 ### 依赖
 
-当前已经有可用的 hosted mirror，可直接按需引用。  
-如果你在同一工作区内做 family 联调，也仍然可以继续用 sibling checkout。
+公开仓库默认使用远程 Git 依赖；本地 sibling checkout 仅建议作为开发时的临时覆盖。
 
 ```toml
 [dependencies]
-# GitHub mirror
-jinguissl_core = { git = "https://github.com/Celading/jinguisslCore" }
-
-# GitCode mirror
-# jinguissl_core = { git = "https://gitcode.com/CjKu/Jingui-Core.git" }
-
-# Local sibling checkout for family development
-# jinguissl_core = { path = "../JinguiSSL-core" }
+jinguissl_core = { git = "https://gitcode.com/CjKu/JinguiCore.git" }
 ```
 
 ### 示例：Ed25519 签名与验签
@@ -119,8 +111,32 @@ JinguiSSL-core/
 它适合作为：
 
 - 上层 contract/facade 的实现基础
-- 框架或中间件的安全核心
-- 仓颉生态里可复用的协议与密码能力底座
+- 框架或中间件的密码与协议功能底座
+- 仓颉生态里可复用的协议与密码能力参考实现
+
+## 安全姿态说明
+
+### 当前已知限制
+
+本仓库的私钥密码操作**尚未通过恒定时间（constant-time）安全认证**。以下路径当前依赖可变时间（variable-time）算术与分支逻辑：
+
+- ECDSA 签名（nonce 标量乘法、模逆运算）
+- ECDH 共享秘密协商
+- RSA 签名与私钥解密（modPow 底层委托）
+- Ed25519 签名与标量运算
+- X25519 密钥交换
+
+这些路径在现有向量测试与协议流测试覆盖下可以通过，但**不应被视为具备侧信道攻击抗性**。
+
+### 当前可宣称的定位
+
+本仓库在当前发布阶段可诚实宣称：
+
+- **功能性密码学与协议实现** — 验证算法与协议在仓颉生态中的可落地性
+- **实验性密码底座** — 可被上层框架或中间件引用，但尚未完成生产级侧信道加固
+- **审计与测试靶面** — 欢迎社区审计与贡献，但暂不自称"生产级密码学后端"或"OpenSSL 替代"
+
+所有公开发布的代码适用于评估、实验与集成验证场景。不推荐直接用于需要侧信道防护的生产环境。
 
 ## 许可证
 
