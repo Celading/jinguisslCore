@@ -134,7 +134,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
             continue
         }
 
-        let p = scalarMul(g, k, params)
+        let p = scalarMulProjectivePoint(g, k, params)
         if (p.infinity) {
             attempt += 1
             continue
