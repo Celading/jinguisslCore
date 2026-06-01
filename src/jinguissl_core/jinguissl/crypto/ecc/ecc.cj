@@ -124,6 +124,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
     let z = digestToCurveScalar(digest, params.n)
     let g = AffinePoint(params.gx, params.gy)
     let scalarBytes = fieldByteLength(params.n)
+    let orderBits = bitLength(params.n)
 
     var attempt = 0
     while (attempt < 128) {
@@ -134,7 +135,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
             continue
         }
 
-        let p = scalarMul(g, k, params)
+        let p = scalarMulProjectivePoint(g, k, params)
         if (p.infinity) {
             attempt += 1
             continue
@@ -147,7 +148,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
         }
 
         let kInv = try {
-            k.modInverse(params.n)
+            k.modInversePrimeFixedSchedule(params.n, orderBits)
         } catch (_: CryptoException) {
             attempt += 1
             continue
@@ -177,9 +178,10 @@ public func ecdsaVerify(publicKey: EcPublicKey, digest: Array<Byte>, r: BigNum, 
     }
 
     let z = digestToCurveScalar(digest, params.n)
+    let orderBits = bitLength(params.n)
 
     let w = try {
-        s.modInverse(params.n)
+        s.modInversePrimeFixedSchedule(params.n, orderBits)
     } catch (_: CryptoException) {
         return false
     }
@@ -188,8 +190,8 @@ public func ecdsaVerify(publicKey: EcPublicKey, digest: Array<Byte>, r: BigNum, 
     let u2 = modNormalize(r.mul(w), params.n)
     let g = AffinePoint(params.gx, params.gy)
 
-    let p1 = scalarMul(g, u1, params)
-    let p2 = scalarMul(q, u2, params)
+    let p1 = scalarMulProjectivePoint(g, u1, params)
+    let p2 = scalarMulProjectivePoint(q, u2, params)
     let p = pointAdd(p1, p2, params)
     if (p.infinity) {
         return false
@@ -215,7 +217,7 @@ public func ecdhDeriveSharedSecret(privateKey: EcPrivateKey, peerPublicKey: EcPu
         throw CryptoException(InvalidArgument, "peer public key point is not on curve")
     }
 
-    let shared = scalarMul(peer, scalar, params)
+    let shared = scalarMulProjectivePoint(peer, scalar, params)
     if (shared.infinity) {
         throw CryptoException(InvalidArgument, "ECDH shared point is at infinity")
     }
@@ -231,7 +233,7 @@ public func ecPublicFromPrivateKey(privateKey: EcPrivateKey): EcPublicKey {
     let params = paramsForCurve(privateKey.curve)
     let scalar = normalizeScalar(privateKey.scalar, params.n)
     let g = AffinePoint(params.gx, params.gy)
-    let publicPoint = scalarMul(g, scalar, params)
+    let publicPoint = scalarMulProjectivePoint(g, scalar, params)
     if (publicPoint.infinity) {
         throw CryptoException(InvalidArgument, "EC public key derivation returned point at infinity")
     }
@@ -602,8 +604,15 @@ internal func scalarMulProjective(
 ): (BigNum, BigNum, Bool) {
     let params = paramsForCurve(curve)
     let point = AffinePoint(gx, gy)
+    let affineResult = scalarMulProjectivePoint(point, scalar, params)
+    (affineResult.x, affineResult.y, affineResult.infinity)
+}
+
+private func scalarMulProjectivePoint(
+    point: AffinePoint, scalar: BigNum, params: CurveParams
+): AffinePoint {
     if (point.infinity || scalar.isZero()) {
-        return (BigNum.zero(), BigNum.zero(), true)
+        return AffinePoint.infinityPoint()
     }
 
     let orderBits = bitLength(params.n)
@@ -622,6 +631,5 @@ internal func scalarMulProjective(
         bitIndex += 1
     }
 
-    let affineResult = jacobianToAffine(result, params)
-    (affineResult.x, affineResult.y, affineResult.infinity)
+    jacobianToAffine(result, params)
 }
