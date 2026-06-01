@@ -188,8 +188,8 @@ public func ecdsaVerify(publicKey: EcPublicKey, digest: Array<Byte>, r: BigNum, 
     let u2 = modNormalize(r.mul(w), params.n)
     let g = AffinePoint(params.gx, params.gy)
 
-    let p1 = scalarMul(g, u1, params)
-    let p2 = scalarMul(q, u2, params)
+    let p1 = scalarMulProjectivePoint(g, u1, params)
+    let p2 = scalarMulProjectivePoint(q, u2, params)
     let p = pointAdd(p1, p2, params)
     if (p.infinity) {
         return false
