@@ -124,6 +124,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
     let z = digestToCurveScalar(digest, params.n)
     let g = AffinePoint(params.gx, params.gy)
     let scalarBytes = fieldByteLength(params.n)
+    let orderBits = bitLength(params.n)
 
     var attempt = 0
     while (attempt < 128) {
@@ -134,7 +135,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
             continue
         }
 
-        let p = scalarMul(g, k, params)
+        let p = scalarMulProjectivePoint(g, k, params)
         if (p.infinity) {
             attempt += 1
             continue
@@ -147,7 +148,7 @@ public func ecdsaSign(privateKey: EcPrivateKey, digest: Array<Byte>): (BigNum, B
         }
 
         let kInv = try {
-            k.modInverse(params.n)
+            k.modInversePrimeFixedSchedule(params.n, orderBits)
         } catch (_: CryptoException) {
             attempt += 1
             continue
@@ -177,9 +178,10 @@ public func ecdsaVerify(publicKey: EcPublicKey, digest: Array<Byte>, r: BigNum, 
     }
 
     let z = digestToCurveScalar(digest, params.n)
+    let orderBits = bitLength(params.n)
 
     let w = try {
-        s.modInverse(params.n)
+        s.modInversePrimeFixedSchedule(params.n, orderBits)
     } catch (_: CryptoException) {
         return false
     }
@@ -188,8 +190,8 @@ public func ecdsaVerify(publicKey: EcPublicKey, digest: Array<Byte>, r: BigNum, 
     let u2 = modNormalize(r.mul(w), params.n)
     let g = AffinePoint(params.gx, params.gy)
 
-    let p1 = scalarMul(g, u1, params)
-    let p2 = scalarMul(q, u2, params)
+    let p1 = scalarMulProjectivePoint(g, u1, params)
+    let p2 = scalarMulProjectivePoint(q, u2, params)
     let p = pointAdd(p1, p2, params)
     if (p.infinity) {
         return false
@@ -215,7 +217,7 @@ public func ecdhDeriveSharedSecret(privateKey: EcPrivateKey, peerPublicKey: EcPu
         throw CryptoException(InvalidArgument, "peer public key point is not on curve")
     }
 
-    let shared = scalarMul(peer, scalar, params)
+    let shared = scalarMulProjectivePoint(peer, scalar, params)
     if (shared.infinity) {
         throw CryptoException(InvalidArgument, "ECDH shared point is at infinity")
     }
@@ -231,7 +233,7 @@ public func ecPublicFromPrivateKey(privateKey: EcPrivateKey): EcPublicKey {
     let params = paramsForCurve(privateKey.curve)
     let scalar = normalizeScalar(privateKey.scalar, params.n)
     let g = AffinePoint(params.gx, params.gy)
-    let publicPoint = scalarMul(g, scalar, params)
+    let publicPoint = scalarMulProjectivePoint(g, scalar, params)
     if (publicPoint.infinity) {
         throw CryptoException(InvalidArgument, "EC public key derivation returned point at infinity")
     }
@@ -473,4 +475,161 @@ private func bitLength(value: BigNum): Int64 {
 private func fieldByteLength(prime: BigNum): Int64 {
     let bits = bitLength(prime)
     (bits + 7) / 8
+}
+
+// Projective/Jacobian coordinate helpers used as ECC groundwork.
+private class JacobianPoint {
+    let infinity: Bool
+    let x: BigNum
+    let y: BigNum
+    let z: BigNum
+
+    init(x: BigNum, y: BigNum, z: BigNum) {
+        this.infinity = false
+        this.x = x
+        this.y = y
+        this.z = z
+    }
+
+    init(infinity: Bool) {
+        this.infinity = infinity
+        this.x = BigNum.zero()
+        this.y = BigNum.zero()
+        this.z = BigNum.zero()
+    }
+
+    static func infinityPoint(): JacobianPoint {
+        JacobianPoint(true)
+    }
+}
+
+private func affineToJacobian(p: AffinePoint): JacobianPoint {
+    if (p.infinity) {
+        return JacobianPoint.infinityPoint()
+    }
+    JacobianPoint(p.x, p.y, BigNum.one())
+}
+
+private func jacobianToAffine(p: JacobianPoint, params: CurveParams): AffinePoint {
+    if (p.infinity) {
+        return AffinePoint.infinityPoint()
+    }
+    let primeBits = bitLength(params.p)
+    let zInv = p.z.modInversePrimeFixedSchedule(params.p, primeBits)
+    let zInvSq = zInv.mul(zInv).mod(params.p)
+    let zInvCu = zInvSq.mul(zInv).mod(params.p)
+    let x3 = p.x.mul(zInvSq).mod(params.p)
+    let y3 = p.y.mul(zInvCu).mod(params.p)
+    AffinePoint(x3, y3)
+}
+
+private func jacobianDouble(p: JacobianPoint, params: CurveParams): JacobianPoint {
+    if (p.infinity) {
+        return p
+    }
+    let yNorm = modNormalize(p.y, params.p)
+    if (yNorm.isZero()) {
+        return JacobianPoint.infinityPoint()
+    }
+
+    let three = BigNum.fromHex("3")
+    let two = BigNum.fromHex("2")
+    let four = BigNum.fromHex("4")
+    let eight = BigNum.fromHex("8")
+
+    let x1Sq = p.x.mul(p.x).mod(params.p)
+    let y1Sq = yNorm.mul(yNorm).mod(params.p)
+    let z1Sq = p.z.mul(p.z).mod(params.p)
+
+    let sVal = four.mul(p.x.mul(y1Sq)).mod(params.p)
+
+    let aIsMinus3 = (params.a.cmp(params.p.sub(three)) == 0)
+    var mVal: BigNum
+    if (aIsMinus3) {
+        let xMinusZsq = p.x.sub(z1Sq).mod(params.p)
+        let xPlusZsq = p.x.add(z1Sq).mod(params.p)
+        mVal = three.mul(xMinusZsq.mul(xPlusZsq)).mod(params.p)
+    } else {
+        let z1Pow4 = z1Sq.mul(z1Sq).mod(params.p)
+        mVal = three.mul(x1Sq).add(params.a.mul(z1Pow4)).mod(params.p)
+    }
+
+    let x3 = mVal.mul(mVal).sub(two.mul(sVal)).mod(params.p)
+    let y1Pow4 = y1Sq.mul(y1Sq).mod(params.p)
+    let y3 = mVal.mul(sVal.sub(x3)).sub(eight.mul(y1Pow4)).mod(params.p)
+    let z3 = two.mul(yNorm).mul(p.z).mod(params.p)
+
+    JacobianPoint(x3, y3, z3)
+}
+
+private func jacobianAdd(p: JacobianPoint, q: JacobianPoint, params: CurveParams): JacobianPoint {
+    if (p.infinity) {
+        return q
+    }
+    if (q.infinity) {
+        return p
+    }
+
+    let z1Sq = p.z.mul(p.z).mod(params.p)
+    let z2Sq = q.z.mul(q.z).mod(params.p)
+
+    let u1 = p.x.mul(z2Sq).mod(params.p)
+    let u2 = q.x.mul(z1Sq).mod(params.p)
+    let s1 = p.y.mul(z2Sq.mul(q.z)).mod(params.p)
+    let s2 = q.y.mul(z1Sq.mul(p.z)).mod(params.p)
+
+    let hVal = u2.sub(u1).mod(params.p)
+    if (hVal.isZero()) {
+        let rCheck = s2.sub(s1).mod(params.p)
+        if (rCheck.isZero()) {
+            return jacobianDouble(p, params)
+        }
+        return JacobianPoint.infinityPoint()
+    }
+    let rVal = s2.sub(s1).mod(params.p)
+
+    let hSq = hVal.mul(hVal).mod(params.p)
+    let hCu = hSq.mul(hVal).mod(params.p)
+    let two = BigNum.fromHex("2")
+
+    let x3 = rVal.mul(rVal).sub(hCu).sub(two.mul(u1.mul(hSq))).mod(params.p)
+    let y3 = rVal.mul(u1.mul(hSq).sub(x3)).sub(s1.mul(hCu)).mod(params.p)
+    let z3 = hVal.mul(p.z).mul(q.z).mod(params.p)
+
+    JacobianPoint(x3, y3, z3)
+}
+
+internal func scalarMulProjective(
+    gx: BigNum, gy: BigNum, scalar: BigNum, curve: NamedCurve
+): (BigNum, BigNum, Bool) {
+    let params = paramsForCurve(curve)
+    let point = AffinePoint(gx, gy)
+    let affineResult = scalarMulProjectivePoint(point, scalar, params)
+    (affineResult.x, affineResult.y, affineResult.infinity)
+}
+
+private func scalarMulProjectivePoint(
+    point: AffinePoint, scalar: BigNum, params: CurveParams
+): AffinePoint {
+    if (point.infinity || scalar.isZero()) {
+        return AffinePoint.infinityPoint()
+    }
+
+    let orderBits = bitLength(params.n)
+    let k = scalar.toBigInt()
+    let zero = BigInt(0)
+    let one = BigInt(1)
+    var result = JacobianPoint.infinityPoint()
+    var addend = affineToJacobian(point)
+
+    var bitIndex = Int64(0)
+    while (bitIndex < orderBits) {
+        if (((k >> bitIndex) & one) != zero) {
+            result = jacobianAdd(result, addend, params)
+        }
+        addend = jacobianDouble(addend, params)
+        bitIndex += 1
+    }
+
+    jacobianToAffine(result, params)
 }
