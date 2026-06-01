@@ -97,4 +97,62 @@ public class CoreBigNumCompatTestSuite {
             @Assert(e.code.toString(), "DIVIDE_BY_ZERO")
         }
     }
+
+    @TestCase
+    public func testModInversePrimeFixedSchedule(): Unit {
+        func check(value: BigNum, p: BigNum, bitLen: Int64): Unit {
+            let expected = value.modInverse(p)
+            let got = value.modInversePrimeFixedSchedule(p, bitLen)
+            if (got.toHex() != expected.toHex()) {
+                @Fail("modInversePrimeFixedSchedule expected ${expected.toHex()} got ${got.toHex()}")
+            }
+        }
+
+        let p13 = BigNum.fromHex("0d")
+        check(BigNum.fromHex("05"), p13, 4)
+        check(BigNum.one(), p13, 4)
+        check(BigNum.fromHex("0c"), p13, 4)
+
+        let p251 = BigNum.fromHex("fb")
+        check(BigNum.fromHex("03"), p251, 8)
+
+        let p25519 = BigNum.fromHex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed")
+        check(BigNum.fromHex("02"), p25519, 255)
+        check(BigNum.fromHex("05"), p25519, 255)
+        check(BigNum.one(), p25519, 255)
+
+        let p3 = BigNum.fromHex("03")
+        check(BigNum.fromHex("02"), p3, 2)
+    }
+
+    @TestCase
+    public func testModInversePrimeFixedScheduleRejectsInvalidInputs(): Unit {
+        try {
+            _ = BigNum.fromHex("02").modInversePrimeFixedSchedule(BigNum.fromHex("00"), 1)
+            @Fail("modInversePrimeFixedSchedule should reject zero modulus")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "INVALID_ARGUMENT")
+        }
+
+        try {
+            _ = BigNum.fromHex("02").modInversePrimeFixedSchedule(BigNum.fromHex("04"), 3)
+            @Fail("modInversePrimeFixedSchedule should reject even modulus")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "INVALID_ARGUMENT")
+        }
+
+        try {
+            _ = BigNum.fromHex("02").modInversePrimeFixedSchedule(BigNum.fromHex("0d"), 0)
+            @Fail("modInversePrimeFixedSchedule should reject non-positive bitLength")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "INVALID_ARGUMENT")
+        }
+
+        try {
+            _ = BigNum.fromHex("0d").modInversePrimeFixedSchedule(BigNum.fromHex("0d"), 4)
+            @Fail("modInversePrimeFixedSchedule should reject non-invertible value")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "NO_MOD_INVERSE")
+        }
+    }
 }
