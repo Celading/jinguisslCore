@@ -10,6 +10,7 @@ import jinguissl_core.jinguissl.crypto.utils.{constantTimeEquals, csprngBytes, r
 private let RSA_KEYGEN_OUTER_MAX_ATTEMPTS: Int64 = 32
 private let RSA_PRIME_SEARCH_MAX_ATTEMPTS: Int64 = 1_000_000
 private let RSA_PRIMALITY_ROUNDS: Int64 = 12
+private let RSA_BLINDING_MAX_ATTEMPTS: Int64 = 64
 private let RSA_SMALL_PRIMES: Array<Int64> = [
     3, 5, 7, 11, 13, 17, 19, 23, 29, 31,
     37, 41, 43, 47, 53, 59, 61, 67, 71, 73,
@@ -437,7 +438,34 @@ private func rsaPrivateTransform(key: RsaPrivateKey, input: Array<Byte>): Array<
     if (m.cmp(modulus) >= 0) {
         throw CryptoException(InvalidArgument, "RSA input representative out of range")
     }
-    m.modExp(key.privateExponent, modulus).toBytesBE(paddedLen: k)
+    let (blinded, blindInverse) = rsaBlindInput(m, key.publicKey, k)
+    let blindedResult = blinded.modExp(key.privateExponent, modulus)
+    blindedResult.mul(blindInverse).mod(modulus).toBytesBE(paddedLen: k)
+}
+
+private func rsaBlindInput(message: BigNum, publicKey: RsaPublicKey, byteLen: Int64): (BigNum, BigNum) {
+    let modulus = publicKey.modulus
+    let one = BigNum.one()
+    var attempt = 0
+
+    while (attempt < RSA_BLINDING_MAX_ATTEMPTS) {
+        let r = BigNum.fromBytesBE(csprngBytes(byteLen)).mod(modulus)
+        if (r.cmp(one) <= 0 || BigNum.gcd(r, modulus).cmp(one) != 0) {
+            attempt += 1
+            continue
+        }
+
+        let rInverse = try {
+            r.modInverse(modulus)
+        } catch (_: CryptoException) {
+            attempt += 1
+            continue
+        }
+        let rToPublicExponent = r.modExp(publicKey.exponent, modulus)
+        return (message.mul(rToPublicExponent).mod(modulus), rInverse)
+    }
+
+    throw CryptoException(InternalError, "RSA blinding factor generation exceeded attempt budget")
 }
 
 private func rsaPublicTransform(key: RsaPublicKey, input: Array<Byte>): Array<Byte> {
