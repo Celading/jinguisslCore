@@ -11,6 +11,7 @@ public let ED25519_SEED_LEN: Int64 = 32
 public let ED25519_PUBLIC_KEY_LEN: Int64 = 32
 public let ED25519_SIGNATURE_LEN: Int64 = 64
 
+private let ED25519_SCALAR_BITS: Int64 = 256
 private let ED25519_P: BigInt = BigNum.fromHex("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed").toBigInt()
 private let ED25519_D: BigInt = BigNum.fromHex("52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3").toBigInt()
 private let ED25519_ORDER_L: BigInt = BigNum.fromHex("1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed").toBigInt()
@@ -186,25 +187,29 @@ private func scalarMul(point: Ed25519Point, scalar: BigInt): Ed25519Point {
     if (scalar.sign < 0) {
         throw CryptoException(InvalidArgument, "ed25519 scalar must be non-negative")
     }
-    if (scalar == BigInt(0)) {
-        return Ed25519Point.identity()
-    }
 
-    let orderBits = bitLengthBigInt(scalar)
-    let zero = BigInt(0)
     let one = BigInt(1)
     var result = Ed25519Point.identity()
     var addend = point
     var bitIndex = Int64(0)
 
-    while (bitIndex < orderBits) {
-        if (((scalar >> bitIndex) & one) != zero) {
-            result = pointAdd(result, addend)
-        }
+    // Fixed-round selection reduces scalar-bit control flow, but BigInt and inversion timing remain unproven.
+    while (bitIndex < ED25519_SCALAR_BITS) {
+        let bit = (scalar >> bitIndex) & one
+        let candidate = pointAdd(result, addend)
+        result = selectPoint(bit, candidate, result)
         addend = pointAdd(addend, addend)
         bitIndex += 1
     }
     result
+}
+
+private func selectPoint(bit: BigInt, ifOne: Ed25519Point, ifZero: Ed25519Point): Ed25519Point {
+    Ed25519Point(selectBigInt(bit, ifOne.x, ifZero.x), selectBigInt(bit, ifOne.y, ifZero.y))
+}
+
+private func selectBigInt(bit: BigInt, ifOne: BigInt, ifZero: BigInt): BigInt {
+    modP(ifZero + (bit * (ifOne - ifZero)))
 }
 
 private func bitLengthBigInt(value: BigInt): Int64 {
