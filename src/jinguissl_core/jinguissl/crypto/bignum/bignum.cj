@@ -202,9 +202,10 @@ public func modExp(exponent: BigNum, modulus: BigNum): BigNum {
             throw CryptoException(InvalidArgument, "negative exponent is not supported")
         }
 
-        // Phase-1: odd modulus path is named Montgomery route.
+        // Phase-1: odd modulus path is only a modPow wrapper; keep the
+        // wording honest until a real Montgomery implementation exists.
         let result = if (isOdd(m)) {
-            montgomeryModExp(_value, exponent._value, m)
+            oddModulusModPowPhase1(_value, exponent._value, m)
         } else {
             _value.modPow(exponent._value, m: m)
         }
@@ -421,8 +422,7 @@ public func rshift(bits: Int64): BigNum {
         (value % BigInt(2)) != BigInt(0)
     }
 
-    private static func montgomeryModExp(base: BigInt, exponent: BigInt, modulus: BigInt): BigInt {
-        // Phase-1 implementation keeps Montgomery entry point stable.
+    private static func oddModulusModPowPhase1(base: BigInt, exponent: BigInt, modulus: BigInt): BigInt {
         base.modPow(exponent, m: modulus)
     }
 
