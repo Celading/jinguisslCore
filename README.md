@@ -34,6 +34,12 @@
 - 协议能力：`TLS 1.2`、`TLS 1.3`、`SSH transport / handshake`
 - 工具与性能：大数兼容层、性能基准、测试向量与协议流测试
 
+### 关于 RC4
+
+`RC4` 不属于当前适配主线。JinguiSSL-core 当前聚焦现代密码与协议能力，例如 `AES`、`ChaCha20-Poly1305`、`ECC`、`X25519`、`X.509`、`TLS 1.2/1.3` 与 `SSH`。
+
+RC4 已不适合作为现代 TLS / HTTPS 的默认兼容方向；如果未来确有历史系统互通需求，应作为单独的 legacy compatibility 线路评估，而不是并入长期维护主线。
+
 ## 快速开始
 
 ### 依赖
