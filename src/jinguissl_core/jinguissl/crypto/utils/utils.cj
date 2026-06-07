@@ -1,6 +1,5 @@
 package jinguissl_core.jinguissl.crypto.utils
 
-import std.random.Random
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
 
 private let GETENTROPY_OK: Int32 = Int32(0)
@@ -109,21 +108,13 @@ public func constantTimeEquals(left: Array<Byte>, right: Array<Byte>): Bool {
 /**
  * randomSeed.
  *
+ * Compatibility wrapper for security-sensitive callers. It must fail closed
+ * with csprngBytes(...) instead of falling back to a non-CSPRNG source.
+ *
  * @throws CryptoException 当操作失败时抛出
  */
 public func randomSeed(size!: Int64 = 32): Array<Byte> {
-    if (size <= 0) {
-        throw CryptoException(InvalidArgument, "random seed size must be > 0")
-    }
-    if (size > Int64(Int32.Max)) {
-        throw CryptoException(OutOfBounds, "random seed size is too large")
-    }
-    let out = Array<Byte>(size, repeat: 0)
-    if (fillSystemEntropy(out)) {
-        return out
-    }
-    let random = Random()
-    random.nextBytes(Int32(size))
+    csprngBytes(size)
 }
 
 public func csprngBytes(): Array<Byte> {

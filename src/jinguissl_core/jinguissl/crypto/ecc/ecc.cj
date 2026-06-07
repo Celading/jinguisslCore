@@ -599,7 +599,8 @@ private func jacobianAdd(p: JacobianPoint, q: JacobianPoint, params: CurveParams
     JacobianPoint(x3, y3, z3)
 }
 
-internal func scalarMulProjective(
+/** @internal - projective scalar multiplication parity hook for Core tests; not a contract facade. */
+public func scalarMulProjective(
     gx: BigNum, gy: BigNum, scalar: BigNum, curve: NamedCurve
 ): (BigNum, BigNum, Bool) {
     let params = paramsForCurve(curve)
