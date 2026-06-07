@@ -2,7 +2,7 @@
   <img src="https://img.shields.io/badge/Cangjie-JinguiSSL%20Core-c96b2c?style=for-the-badge&labelColor=1f2430" alt="JinguiSSL Core" />
   <img src="https://img.shields.io/badge/package-static-2f855a?style=for-the-badge&labelColor=1f2430" alt="Static Package" />
   <img src="https://img.shields.io/badge/focus-crypto%20%2B%20protocol-3182ce?style=for-the-badge&labelColor=1f2430" alt="Crypto and Protocol" />
-  <img src="https://img.shields.io/badge/license-Apache%202.0-1f9d55?style=for-the-badge&labelColor=1f2430" alt="Apache 2.0" />
+  <img src="https://img.shields.io/badge/license-LGPL--3.0--only-1f9d55?style=for-the-badge&labelColor=1f2430" alt="LGPL-3.0-only" />
 </p>
 <div align="center">
 <span style="font-weight:300;font-size:36px">JinguiSSL Core</span><br/>
@@ -146,4 +146,6 @@ JinguiSSL-core/
 
 ## 许可证
 
-本项目采用 `Apache License 2.0`。详见 `LICENSE`。
+自本许可切换版本起，本项目采用 `LGPL-3.0-only`。详见 `LICENSE`。
+
+此前已经按 `Apache-2.0` 发布的公开版本继续保留其发布时授权；本说明不撤回已发布版本的既有授权，只定义当前及后续源码线的许可面。
