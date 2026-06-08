@@ -6,7 +6,8 @@ import jinguissl_core.jinguissl.crypto.rsa.*
 
 @Test
 public class CoreSideChannelHarnessTestSuite {
-    private let TEST_DIGEST_HEX: String = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+    private let TEST_DIGEST_HEX: String =
+        TEST_HEX_32_00112233445566778899AABBCCDDEEFF_00112233445566778899AABBCCDDEEFF
 
     @TestCase
     public func testRsaBlindingHarnessKeepsPkcs1v15RepresentativeStable(): Unit {

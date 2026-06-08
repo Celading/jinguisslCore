@@ -71,7 +71,9 @@ public func ed25519Verify(publicKey: Array<Byte>, message: Array<Byte>, signatur
         let encodedR = signature[0..ED25519_PUBLIC_KEY_LEN]
         let encodedS = signature[ED25519_PUBLIC_KEY_LEN..]
         let pointR = decodePoint(encodedR)
-        if (isSmallOrder(publicPoint) || isSmallOrder(pointR)) {
+        let publicPointIsSmallOrder = isSmallOrder(publicPoint)
+        let pointRIsSmallOrder = isSmallOrder(pointR)
+        if (publicPointIsSmallOrder || pointRIsSmallOrder) {
             return false
         }
         let scalarS = decodeLittleEndianInt(encodedS)

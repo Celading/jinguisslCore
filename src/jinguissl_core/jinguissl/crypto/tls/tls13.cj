@@ -1149,7 +1149,9 @@ public func tls13SelectPskIdentityFromSessionTickets(
             if (!ticket.isExpired(now)) {
                 let expectedBinder = tls13ComputePskBinder(ticket.secret, transcriptHash)
                 let providedBinder = parsed.binders[i]
-                if (providedBinder.size == expectedBinder.size && constantTimeEquals(providedBinder, expectedBinder)) {
+                let binderSizesMatch = providedBinder.size == expectedBinder.size
+                let binderBytesMatch = constantTimeEquals(providedBinder, expectedBinder)
+                if (binderSizesMatch && binderBytesMatch) {
                     return i
                 }
             }
