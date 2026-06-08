@@ -7,8 +7,9 @@ import jinguissl_core.jinguissl.crypto.rsa.*
 
 @Test
 public class CoreRsaTestSuite {
-    // 32-byte digest = SHA-256("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff")
-    private let TEST_DIGEST_HEX: String = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+    // 32-byte digest fixture used by deterministic RSA signature tests.
+    private let TEST_DIGEST_HEX: String =
+        TEST_HEX_32_00112233445566778899AABBCCDDEEFF_00112233445566778899AABBCCDDEEFF
 
     @TestCase
     public func testKeyValidationAccept2048(): Unit {

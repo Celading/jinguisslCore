@@ -302,7 +302,9 @@ private func rsaGeneratePrimeForKeygen(bits: Int64, publicExponent: BigInt): Big
             continue
         }
 
-        if (rsaBigIntGcd(candidate - one, publicExponent) == one && rsaIsProbablePrime(candidate)) {
+        let exponentIsCoprime = rsaBigIntGcd(candidate - one, publicExponent) == one
+        let candidateIsProbablePrime = rsaIsProbablePrime(candidate)
+        if (exponentIsCoprime && candidateIsProbablePrime) {
             return candidate
         }
 

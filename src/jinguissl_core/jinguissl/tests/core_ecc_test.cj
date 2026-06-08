@@ -7,7 +7,8 @@ import jinguissl_core.jinguissl.crypto.error.CryptoException
 
 @Test
 public class CoreEccTestSuite {
-    private let TEST_DIGEST_HEX: String = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+    private let TEST_DIGEST_HEX: String =
+        TEST_HEX_32_00112233445566778899AABBCCDDEEFF_00112233445566778899AABBCCDDEEFF
 
     // Generator point (Gx, Gy) for P-256
     private let P256_GX_HEX: String = "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296"

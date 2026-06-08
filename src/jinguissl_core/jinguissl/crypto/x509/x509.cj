@@ -209,7 +209,9 @@ public class X509SelfSignedConfig {
         if (serialNumber.size == 0) {
             throw CryptoException(InvalidArgument, "X509 self-signed serial number must not be empty")
         }
-        if (!isValidX509Time(notBefore) || !isValidX509Time(notAfter)) {
+        let notBeforeIsValid = isValidX509Time(notBefore)
+        let notAfterIsValid = isValidX509Time(notAfter)
+        if (!notBeforeIsValid || !notAfterIsValid) {
             throw CryptoException(InvalidArgument, "X509 validity time must be UTCTime(YYMMDDHHMMSSZ) or GeneralizedTime(YYYYMMDDHHMMSSZ)")
         }
         this.commonName = cn
@@ -251,8 +253,12 @@ public class X509Crl {
         if (!isValidX509Time(thisUpdate)) {
             throw CryptoException(InvalidArgument, "X509 CRL thisUpdate format is invalid")
         }
-        if (nextUpdate.size > 0 && !isValidX509Time(nextUpdate)) {
-            throw CryptoException(InvalidArgument, "X509 CRL nextUpdate format is invalid")
+        let hasNextUpdate = nextUpdate.size > 0
+        if (hasNextUpdate) {
+            let nextUpdateIsValid = isValidX509Time(nextUpdate)
+            if (!nextUpdateIsValid) {
+                throw CryptoException(InvalidArgument, "X509 CRL nextUpdate format is invalid")
+            }
         }
         this.der = der.clone()
         this.tbsDer = tbsDer.clone()
@@ -299,8 +305,12 @@ public class X509VerificationPolicy {
         if (trustAnchors.size == 0) {
             throw CryptoException(InvalidArgument, "X509 verification requires at least one trust anchor")
         }
-        if (validationTime.size > 0 && !isValidX509Time(validationTime)) {
-            throw CryptoException(InvalidArgument, "validationTime must be UTCTime(YYMMDDHHMMSSZ) or GeneralizedTime(YYYYMMDDHHMMSSZ)")
+        let hasValidationTime = validationTime.size > 0
+        if (hasValidationTime) {
+            let validationTimeIsValid = isValidX509Time(validationTime)
+            if (!validationTimeIsValid) {
+                throw CryptoException(InvalidArgument, "validationTime must be UTCTime(YYMMDDHHMMSSZ) or GeneralizedTime(YYYYMMDDHHMMSSZ)")
+            }
         }
         if (requiredLeafKeyUsageMask < 0) {
             throw CryptoException(InvalidArgument, "requiredLeafKeyUsageMask must be non-negative")
@@ -394,12 +404,15 @@ public func x509ParseDer(der: Array<Byte>): X509Certificate {
     let signatureValue = decodeBitStringValue(sigValueElem.value, "X509 certificate signatureValue")
 
     let tbsReader = DerReader(tbsElem.value)
-    if (tbsReader.hasRemaining() && tbsReader.peekTag() == DER_TAG_CONTEXT_0) {
-        let versionElem = tbsReader.readElement("X509 version", expectedTag: DER_TAG_CONTEXT_0)
-        let versionReader = DerReader(versionElem.value)
-        _ = versionReader.readElement("X509 version INTEGER", expectedTag: DER_TAG_INTEGER)
-        if (versionReader.hasRemaining()) {
-            throw CryptoException(ParseError, "X509 version wrapper contains trailing bytes")
+    if (tbsReader.hasRemaining()) {
+        let nextTag = tbsReader.peekTag()
+        if (nextTag == DER_TAG_CONTEXT_0) {
+            let versionElem = tbsReader.readElement("X509 version", expectedTag: DER_TAG_CONTEXT_0)
+            let versionReader = DerReader(versionElem.value)
+            _ = versionReader.readElement("X509 version INTEGER", expectedTag: DER_TAG_INTEGER)
+            if (versionReader.hasRemaining()) {
+                throw CryptoException(ParseError, "X509 version wrapper contains trailing bytes")
+            }
         }
     }
 
@@ -529,8 +542,11 @@ public func x509ParseCrlDer(der: Array<Byte>): X509Crl {
     let signatureValue = decodeBitStringValue(sigValueElem.value, "X509 CRL signatureValue")
 
     let tbsReader = DerReader(tbsElem.value)
-    if (tbsReader.hasRemaining() && tbsReader.peekTag() == DER_TAG_INTEGER) {
-        _ = tbsReader.readElement("X509 CRL version", expectedTag: DER_TAG_INTEGER)
+    if (tbsReader.hasRemaining()) {
+        let nextTag = tbsReader.peekTag()
+        if (nextTag == DER_TAG_INTEGER) {
+            _ = tbsReader.readElement("X509 CRL version", expectedTag: DER_TAG_INTEGER)
+        }
     }
 
     let tbsSigElem = tbsReader.readElement("X509 CRL tbs.signature", expectedTag: DER_TAG_SEQUENCE)
@@ -553,9 +569,12 @@ public func x509ParseCrlDer(der: Array<Byte>): X509Crl {
     }
 
     var revokedSerials: Array<String> = []
-    if (tbsReader.hasRemaining() && tbsReader.peekTag() == DER_TAG_SEQUENCE) {
-        let revokedElem = tbsReader.readElement("X509 CRL revokedCertificates", expectedTag: DER_TAG_SEQUENCE)
-        revokedSerials = parseRevokedCertificates(revokedElem.value)
+    if (tbsReader.hasRemaining()) {
+        let nextTag = tbsReader.peekTag()
+        if (nextTag == DER_TAG_SEQUENCE) {
+            let revokedElem = tbsReader.readElement("X509 CRL revokedCertificates", expectedTag: DER_TAG_SEQUENCE)
+            revokedSerials = parseRevokedCertificates(revokedElem.value)
+        }
     }
 
     var crlExtensions: Array<X509Extension> = []
@@ -989,13 +1008,19 @@ public func x509DecodeBasicConstraintsBits(derEncodedSequence: Array<Byte>): X50
     let reader = DerReader(elem.value)
     var ca = false
     var pathLen: ?Int64 = None
-    if (reader.hasRemaining() && reader.peekTag() == DER_TAG_BOOLEAN) {
-        let caElem = reader.readElement("X509 basicConstraints.cA", expectedTag: DER_TAG_BOOLEAN)
-        ca = decodeBoolean(caElem.value, "X509 basicConstraints.cA")
+    if (reader.hasRemaining()) {
+        let nextTag = reader.peekTag()
+        if (nextTag == DER_TAG_BOOLEAN) {
+            let caElem = reader.readElement("X509 basicConstraints.cA", expectedTag: DER_TAG_BOOLEAN)
+            ca = decodeBoolean(caElem.value, "X509 basicConstraints.cA")
+        }
     }
-    if (reader.hasRemaining() && reader.peekTag() == DER_TAG_INTEGER) {
-        let pathLenElem = reader.readElement("X509 basicConstraints.pathLenConstraint", expectedTag: DER_TAG_INTEGER)
-        pathLen = Some(parseSmallPositiveInteger(pathLenElem.value, "X509 basicConstraints.pathLenConstraint"))
+    if (reader.hasRemaining()) {
+        let nextTag = reader.peekTag()
+        if (nextTag == DER_TAG_INTEGER) {
+            let pathLenElem = reader.readElement("X509 basicConstraints.pathLenConstraint", expectedTag: DER_TAG_INTEGER)
+            pathLen = Some(parseSmallPositiveInteger(pathLenElem.value, "X509 basicConstraints.pathLenConstraint"))
+        }
     }
     if (reader.hasRemaining()) {
         throw CryptoException(ParseError, "X509 basicConstraints has trailing fields")
@@ -1263,8 +1288,9 @@ public func x509VerifyCertificateChain(leaf: X509Certificate, policy: X509Verifi
             let issuerIsTrustAnchor = issuerIndex == chain.size - 1
             let caCertsBelowIssuer = x509CountCaCertificatesBelow(chain, issuerIndex)
             x509RequireIssuerCanSign(issuer, issuerIsTrustAnchor, caCertsBelowIssuer)
-            let requireCrlForCert = policy.requireCrlForAllIssuers ||
-                (policy.requireCrlIfDistributionPointsPresent && x509CertificateHasCrlDistributionPoints(cert))
+            let hasCrlDistributionPoints = x509CertificateHasCrlDistributionPoints(cert)
+            let requireCrlForDistributionPoints = policy.requireCrlIfDistributionPointsPresent && hasCrlDistributionPoints
+            let requireCrlForCert = policy.requireCrlForAllIssuers || requireCrlForDistributionPoints
             x509RequireNotRevokedByCrl(
                 cert,
                 issuer,
@@ -1656,9 +1682,12 @@ private func parseExtensions(explicitValue: Array<Byte>): Array<X509Extension> {
         let oid = decodeOid(oidElem.value, "X509 extension OID")
 
         var critical = false
-        if (extReader.hasRemaining() && extReader.peekTag() == DER_TAG_BOOLEAN) {
-            let criticalElem = extReader.readElement("X509 extension critical", expectedTag: DER_TAG_BOOLEAN)
-            critical = decodeBoolean(criticalElem.value, "X509 extension critical")
+        if (extReader.hasRemaining()) {
+            let nextTag = extReader.peekTag()
+            if (nextTag == DER_TAG_BOOLEAN) {
+                let criticalElem = extReader.readElement("X509 extension critical", expectedTag: DER_TAG_BOOLEAN)
+                critical = decodeBoolean(criticalElem.value, "X509 extension critical")
+            }
         }
 
         let valueElem = extReader.readElement("X509 extension value", expectedTag: DER_TAG_OCTET_STRING)
@@ -3227,7 +3256,9 @@ private func cloneAuthorityKeyIdentifier(value: ?X509AuthorityKeyIdentifier): ?X
 }
 
 private func isValidX509Time(text: String): Bool {
-    isUtcTime(text) || isGeneralizedTime(text)
+    let utcTime = isUtcTime(text)
+    let generalizedTime = isGeneralizedTime(text)
+    utcTime || generalizedTime
 }
 
 private func isUtcTime(text: String): Bool {
