@@ -1671,6 +1671,83 @@ public class Tls13HandshakeFlowTestSuite {
     }
 
     @TestCase
+    public func testTls13HttpClientHelloInteropPrecheck(): Unit {
+        let clientPublic = EcPublicKey(P256, P256_2G_X, P256_2G_Y)
+        let ecdheHello = tls13BuildHttpClientHelloEcdhe(
+            clientPublic,
+            TEST_HOST_API,
+            alpnProtocols: ["h2", "http/1.1"]
+        )
+        let profile = Tls13ClientHelloInteropProfile(
+            serverName: TEST_HOST_API,
+            alpnProtocols: ["h2", "http/1.1"],
+            cipherSuites: [TLS13_CIPHER_SUITE_AES_128_GCM_SHA256],
+            supportedVersions: [TLS13_VERSION_TEST],
+            supportedGroups: [TLS13_GROUP_SECP256R1_TEST],
+            keyShareGroups: [TLS13_GROUP_SECP256R1_TEST],
+            signatureSchemes: [TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256]
+        )
+        let passReport = tls13PrecheckEncodedClientHelloInterop(ecdheHello, profile)
+        @Assert(passReport.ready, true)
+        @Assert(passReport.missing.size, 0)
+        @Assert(passReport.warnings.size, 0)
+    }
+
+    @TestCase
+    public func testTls13HttpClientHelloInteropPrecheckReportsMissingFields(): Unit {
+        let clientPublic = EcPublicKey(P256, P256_2G_X, P256_2G_Y)
+        let ecdheHello = tls13BuildHttpClientHelloEcdhe(
+            clientPublic,
+            TEST_HOST_API,
+            alpnProtocols: ["h2", "http/1.1"]
+        )
+        let mismatchedProfile = Tls13ClientHelloInteropProfile(
+            serverName: "other.example.com",
+            alpnProtocols: ["h3"],
+            cipherSuites: [TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256],
+            supportedVersions: [TLS13_VERSION_TEST],
+            supportedGroups: [TLS13_GROUP_X25519_TEST],
+            keyShareGroups: [TLS13_GROUP_X25519_TEST],
+            signatureSchemes: [0x9999]
+        )
+        let failReport = tls13PrecheckEncodedClientHelloInterop(ecdheHello, mismatchedProfile)
+        @Assert(failReport.ready, false)
+        @Assert(tls13TestContainsString(failReport.missing, "missing SNI other.example.com"), true)
+        @Assert(tls13TestContainsString(failReport.missing, "missing ALPN h3"), true)
+        @Assert(tls13TestContainsString(failReport.missing, "missing cipher_suite 4867"), true)
+        @Assert(tls13TestContainsString(failReport.missing, "missing supported_group 29"), true)
+        @Assert(tls13TestContainsString(failReport.missing, "missing key_share_group 29"), true)
+        @Assert(tls13TestContainsString(failReport.missing, "missing signature_scheme 39321"), true)
+    }
+
+    @TestCase
+    public func testTls13HttpClientHelloInteropPrecheckReportsWarnings(): Unit {
+        let profile = Tls13ClientHelloInteropProfile(
+            serverName: TEST_HOST_API,
+            alpnProtocols: ["h2", "http/1.1"],
+            cipherSuites: [TLS13_CIPHER_SUITE_AES_128_GCM_SHA256],
+            supportedVersions: [TLS13_VERSION_TEST],
+            supportedGroups: [TLS13_GROUP_SECP256R1_TEST],
+            keyShareGroups: [TLS13_GROUP_SECP256R1_TEST],
+            signatureSchemes: [TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256]
+        )
+        let warningSummary = Tls13ClientHelloInteropSummary(
+            TLS_VERSION_1_3,
+            [TLS13_CIPHER_SUITE_AES_128_GCM_SHA256],
+            [],
+            [TEST_HOST_API],
+            ["h2"],
+            [TLS13_VERSION_TEST],
+            [TLS13_GROUP_SECP256R1_TEST],
+            [TLS13_GROUP_SECP256R1_TEST],
+            [TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256]
+        )
+        let warningReport = tls13PrecheckClientHelloInterop(warningSummary, profile)
+        @Assert(warningReport.ready, false)
+        @Assert(warningReport.warnings.size, 1)
+    }
+
+    @TestCase
     public func testTls13HttpPolicyRejectsMissingSniAndAlpn(): Unit {
         let leaf = x509ParsePem(readText("testdata/x509/policy_leaf.pem"))
         let intermediate = x509ParsePem(readText("testdata/x509/policy_intermediate.pem"))
@@ -2482,6 +2559,15 @@ private func bytesToHexLower(bytes: Array<Byte>): String {
         out += table[Int64(value & UInt8(0x0f))]
     }
     out
+}
+
+private func tls13TestContainsString(values: Array<String>, expected: String): Bool {
+    for (value in values) {
+        if (value == expected) {
+            return true
+        }
+    }
+    false
 }
 
 private func readText(path: String): String {
