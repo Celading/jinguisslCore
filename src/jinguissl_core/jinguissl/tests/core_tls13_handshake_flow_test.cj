@@ -19,8 +19,10 @@ private let P384_GX: BigNum = BigNum.fromHex("AA87CA22BE8B05378EB1C71EF320AD746E
 private let P384_GY: BigNum = BigNum.fromHex("3617DE4A96262C6F5D9E98BF9292DC29F8F41DBD289A147CE9DA3113B5F0B8C00A60B1CE1D7E819D7A431D7C90EA0E5F")
 private let TLS13_KEY_SHARE_EXTENSION_TYPE: Int64 = 0x0033
 private let TLS13_SUPPORTED_GROUPS_EXTENSION_TYPE: Int64 = 0x000a
+private let TLS13_SUPPORTED_VERSIONS_EXTENSION_TYPE: Int64 = 0x002b
 private let TLS13_GROUP_SECP256R1_TEST: Int64 = 0x0017
 private let TLS13_GROUP_X25519_TEST: Int64 = 0x001d
+private let TLS13_VERSION_TEST: Int64 = 0x0304
 
 @Test
 public class Tls13HandshakeFlowTestSuite {
@@ -1607,6 +1609,65 @@ public class Tls13HandshakeFlowTestSuite {
         } else {
             @Fail("HTTP X25519 ClientHello should carry ALPN extension")
         }
+    }
+
+    @TestCase
+    public func testTls13HttpClientHelloInteropSummary(): Unit {
+        let clientPublic = EcPublicKey(P256, P256_2G_X, P256_2G_Y)
+        let ecdheHello = tls13BuildHttpClientHelloEcdhe(
+            clientPublic,
+            TEST_HOST_API,
+            alpnProtocols: ["h2", "http/1.1"]
+        )
+        let ecdheSummary = tls13SummarizeClientHello(ecdheHello)
+        @Assert(ecdheSummary.legacyVersion.toString(), "TLS1.2")
+        @Assert(ecdheSummary.cipherSuites, [TLS13_CIPHER_SUITE_AES_128_GCM_SHA256])
+        @Assert(
+            ecdheSummary.extensionTypes,
+            [
+                TLS13_SUPPORTED_VERSIONS_EXTENSION_TYPE,
+                TLS13_SUPPORTED_GROUPS_EXTENSION_TYPE,
+                TLS13_EXT_SIGNATURE_ALGORITHMS,
+                TLS13_KEY_SHARE_EXTENSION_TYPE,
+                TLS_EXT_SERVER_NAME,
+                TLS_EXT_ALPN
+            ]
+        )
+        @Assert(ecdheSummary.serverNames, [TEST_HOST_API])
+        @Assert(ecdheSummary.alpnProtocols, ["h2", "http/1.1"])
+        @Assert(ecdheSummary.supportedVersions, [TLS13_VERSION_TEST])
+        @Assert(ecdheSummary.supportedGroups, [TLS13_GROUP_SECP256R1_TEST])
+        @Assert(ecdheSummary.keyShareGroups, [TLS13_GROUP_SECP256R1_TEST])
+        @Assert(
+            ecdheSummary.signatureSchemes,
+            [
+                TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256,
+                TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384,
+                TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256
+            ]
+        )
+
+        let x25519Private = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+        let x25519Public = x25519PublicFromPrivate(x25519Private)
+        let x25519Hello = tls13BuildHttpClientHelloX25519(
+            x25519Public,
+            TEST_HOST_API,
+            alpnProtocols: ["http/1.1"]
+        )
+        let x25519Summary = tls13SummarizeClientHello(x25519Hello)
+        @Assert(x25519Summary.serverNames, [TEST_HOST_API])
+        @Assert(x25519Summary.alpnProtocols, ["http/1.1"])
+        @Assert(x25519Summary.supportedVersions, [TLS13_VERSION_TEST])
+        @Assert(x25519Summary.supportedGroups, [TLS13_GROUP_X25519_TEST])
+        @Assert(x25519Summary.keyShareGroups, [TLS13_GROUP_X25519_TEST])
+        @Assert(
+            x25519Summary.signatureSchemes,
+            [
+                TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256,
+                TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384,
+                TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256
+            ]
+        )
     }
 
     @TestCase

@@ -3,7 +3,7 @@ package jinguissl_core.jinguissl.crypto.tls
 import std.collection.ArrayList
 import jinguissl_core.jinguissl.crypto.aes.{AesEngineKind}
 import jinguissl_core.jinguissl.crypto.bignum.BigNum
-import jinguissl_core.jinguissl.crypto.compliance.{FipsProfile}
+import jinguissl_core.jinguissl.crypto.compliance.{FipsProfile, TlsVersion}
 import jinguissl_core.jinguissl.crypto.digest.{hmac, sha256, sha384, HashAlgorithm}
 import jinguissl_core.jinguissl.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecdhDeriveSharedSecret, ecdsaSign, ecdsaVerify, requireFipsCurve}
 import jinguissl_core.jinguissl.crypto.error.{CryptoException, CryptoErrorCode}
@@ -622,6 +622,73 @@ private let TLS13_CIPHER_TLS_CHACHA20_POLY1305_SHA256: Int64 = TLS13_CIPHER_SUIT
 private let TLS13_CERT_VERIFY_PREFIX_LEN: Int64 = 64
 private let TLS13_CERT_VERIFY_CONTEXT_SERVER: String = "TLS 1.3, server CertificateVerify"
 private let TLS13_CERT_VERIFY_CONTEXT_CLIENT: String = "TLS 1.3, client CertificateVerify"
+
+public class Tls13ClientHelloInteropSummary {
+    public let legacyVersion: TlsVersion
+    public let cipherSuites: Array<Int64>
+    public let extensionTypes: Array<Int64>
+    public let serverNames: Array<String>
+    public let alpnProtocols: Array<String>
+    public let supportedVersions: Array<Int64>
+    public let supportedGroups: Array<Int64>
+    public let keyShareGroups: Array<Int64>
+    public let signatureSchemes: Array<Int64>
+
+    public init(
+        legacyVersion: TlsVersion,
+        cipherSuites: Array<Int64>,
+        extensionTypes: Array<Int64>,
+        serverNames: Array<String>,
+        alpnProtocols: Array<String>,
+        supportedVersions: Array<Int64>,
+        supportedGroups: Array<Int64>,
+        keyShareGroups: Array<Int64>,
+        signatureSchemes: Array<Int64>
+    ) {
+        this.legacyVersion = legacyVersion
+        this.cipherSuites = cipherSuites.clone()
+        this.extensionTypes = extensionTypes.clone()
+        this.serverNames = serverNames.clone()
+        this.alpnProtocols = alpnProtocols.clone()
+        this.supportedVersions = supportedVersions.clone()
+        this.supportedGroups = supportedGroups.clone()
+        this.keyShareGroups = keyShareGroups.clone()
+        this.signatureSchemes = signatureSchemes.clone()
+    }
+}
+
+/**
+ * tls13SummarizeClientHello.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func tls13SummarizeClientHello(encodedClientHello: Array<Byte>): Tls13ClientHelloInteropSummary {
+    tls13SummarizeDecodedClientHello(tlsDecodeClientHelloHandshake(encodedClientHello))
+}
+
+/**
+ * tls13SummarizeDecodedClientHello.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func tls13SummarizeDecodedClientHello(clientHello: TlsClientHello): Tls13ClientHelloInteropSummary {
+    let extensionTypes = ArrayList<Int64>()
+    for (ext in clientHello.extensions) {
+        extensionTypes.add(ext.extType)
+    }
+
+    Tls13ClientHelloInteropSummary(
+        clientHello.legacyVersion,
+        clientHello.cipherSuites,
+        extensionTypes.toArray(),
+        tls13SummarizeServerNames(clientHello.extensions),
+        tls13SummarizeAlpnProtocols(clientHello.extensions),
+        tls13SummarizeSupportedVersions(clientHello.extensions),
+        tls13SummarizeSupportedGroups(clientHello.extensions),
+        tls13SummarizeKeyShareGroups(clientHello.extensions),
+        tls13SummarizeSignatureSchemes(clientHello.extensions)
+    )
+}
 
 public func tls13HandshakeRequireAllowed(
     profile: FipsProfile,
@@ -3271,6 +3338,57 @@ private func tls13ExtractClientX25519KeyShareFromHello(clientHello: TlsClientHel
     tls13DecodeClientX25519KeyShare(ext.data)
 }
 
+private func tls13FindOptionalExtension(extensions: Array<TlsExtension>, extType: Int64): ?TlsExtension {
+    for (ext in extensions) {
+        if (ext.extType == extType) {
+            return Some(ext)
+        }
+    }
+    None
+}
+
+private func tls13SummarizeServerNames(extensions: Array<TlsExtension>): Array<String> {
+    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS_EXT_SERVER_NAME)) {
+        return tlsParseServerNameExtension(ext)
+    }
+    []
+}
+
+private func tls13SummarizeAlpnProtocols(extensions: Array<TlsExtension>): Array<String> {
+    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS_EXT_ALPN)) {
+        return tlsParseAlpnExtension(ext)
+    }
+    []
+}
+
+private func tls13SummarizeSupportedVersions(extensions: Array<TlsExtension>): Array<Int64> {
+    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_SUPPORTED_VERSIONS)) {
+        return tls13ParseClientSupportedVersionsExtension(ext)
+    }
+    []
+}
+
+private func tls13SummarizeSupportedGroups(extensions: Array<TlsExtension>): Array<Int64> {
+    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_SUPPORTED_GROUPS)) {
+        return tls13ParseSupportedGroupsExtension(ext)
+    }
+    []
+}
+
+private func tls13SummarizeKeyShareGroups(extensions: Array<TlsExtension>): Array<Int64> {
+    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_KEY_SHARE)) {
+        return tls13ParseClientKeyShareGroupIds(ext)
+    }
+    []
+}
+
+private func tls13SummarizeSignatureSchemes(extensions: Array<TlsExtension>): Array<Int64> {
+    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_SIGNATURE_ALGORITHMS)) {
+        return tls13ParseSignatureAlgorithmsExtension(ext)
+    }
+    []
+}
+
 private func tls13RequireExtension(extensions: Array<TlsExtension>, extType: Int64, label: String): TlsExtension {
     for (ext in extensions) {
         if (ext.extType == extType) {
@@ -3358,6 +3476,76 @@ private func tls13EncodeSignatureAlgorithmsExtension(signatureSchemes: Array<Int
         i += 1
     }
     TlsExtension(TLS13_EXT_SIGNATURE_ALGORITHMS, tls13EncodeVector16(encoded))
+}
+
+private func tls13ParseClientSupportedVersionsExtension(extension: TlsExtension): Array<Int64> {
+    if (extension.extType != TLS13_EXT_SUPPORTED_VERSIONS) {
+        throw CryptoException(InvalidArgument, "TLS1.3 extension is not supported_versions")
+    }
+    if (extension.data.size < 3) {
+        throw CryptoException(ParseError, "TLS1.3 supported_versions extension is too short")
+    }
+    let vectorLen = Int64(UInt8(extension.data[0]))
+    if (vectorLen == 0 || (vectorLen % 2) != 0 || vectorLen != extension.data.size - 1) {
+        throw CryptoException(ParseError, "TLS1.3 supported_versions vector length is invalid")
+    }
+
+    let versions = ArrayList<Int64>()
+    var offset = 1
+    while (offset < extension.data.size) {
+        versions.add(tls13DecodeUInt16(extension.data, offset))
+        offset += 2
+    }
+    versions.toArray()
+}
+
+private func tls13ParseSupportedGroupsExtension(extension: TlsExtension): Array<Int64> {
+    if (extension.extType != TLS13_EXT_SUPPORTED_GROUPS) {
+        throw CryptoException(InvalidArgument, "TLS1.3 extension is not supported_groups")
+    }
+    tls13DecodeUInt16ListVector16(extension.data, "TLS1.3 supported_groups")
+}
+
+private func tls13ParseClientKeyShareGroupIds(extension: TlsExtension): Array<Int64> {
+    if (extension.extType != TLS13_EXT_KEY_SHARE) {
+        throw CryptoException(InvalidArgument, "TLS1.3 extension is not key_share")
+    }
+    let entries = tls13DecodeVector16(extension.data, "TLS1.3 client key_share list")
+    let groups = ArrayList<Int64>()
+    var offset = 0
+    while (offset < entries.size) {
+        if (offset + 4 > entries.size) {
+            throw CryptoException(ParseError, "TLS1.3 client key_share entry is truncated")
+        }
+        let group = tls13DecodeUInt16(entries, offset)
+        offset += 2
+        let keyLen = tls13DecodeUInt16(entries, offset)
+        offset += 2
+        if (keyLen == 0 || offset + keyLen > entries.size) {
+            throw CryptoException(ParseError, "TLS1.3 client key_share entry length is invalid")
+        }
+        groups.add(group)
+        offset += keyLen
+    }
+    if (groups.size == 0) {
+        throw CryptoException(ParseError, "TLS1.3 client key_share list is empty")
+    }
+    groups.toArray()
+}
+
+private func tls13DecodeUInt16ListVector16(data: Array<Byte>, label: String): Array<Int64> {
+    let vector = tls13DecodeVector16(data, label)
+    if (vector.size == 0 || (vector.size % 2) != 0) {
+        throw CryptoException(ParseError, "${label} vector length is invalid")
+    }
+
+    let values = ArrayList<Int64>()
+    var offset = 0
+    while (offset < vector.size) {
+        values.add(tls13DecodeUInt16(vector, offset))
+        offset += 2
+    }
+    values.toArray()
 }
 
 private func tls13ParseSignatureAlgorithmsExtension(extension: TlsExtension): Array<Int64> {
