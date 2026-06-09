@@ -10,6 +10,10 @@ import jinguissl_core.jinguissl.crypto.x509.{X509VerificationPolicy, X509Verific
 public let TLS_HTTP_ALPN_H2: String = "h2"
 public let TLS_HTTP_ALPN_HTTP11: String = "http/1.1"
 
+private let TLS_HTTP_VERSION_TLS13: Int64 = 0x0304
+private let TLS_HTTP_GROUP_SECP256R1: Int64 = 0x0017
+private let TLS_HTTP_GROUP_X25519: Int64 = 0x001d
+
 public class TlsHttpNegotiationPolicy {
     public let requireServerName: Bool
     public let allowedServerNames: Array<String>
@@ -34,6 +38,20 @@ public class TlsHttpNegotiationPolicy {
 
 public func tlsHttpDefaultAlpnPreference(): Array<String> {
     [TLS_HTTP_ALPN_H2, TLS_HTTP_ALPN_HTTP11]
+}
+
+public func tls13HttpClientHelloInteropProfileEcdheP256(
+    serverName: String,
+    alpnProtocols!: Array<String> = []
+): Tls13ClientHelloInteropProfile {
+    tls13HttpClientHelloInteropProfileForGroup(serverName, TLS_HTTP_GROUP_SECP256R1, alpnProtocols)
+}
+
+public func tls13HttpClientHelloInteropProfileX25519(
+    serverName: String,
+    alpnProtocols!: Array<String> = []
+): Tls13ClientHelloInteropProfile {
+    tls13HttpClientHelloInteropProfileForGroup(serverName, TLS_HTTP_GROUP_X25519, alpnProtocols)
 }
 
 public func tls13BuildHttpClientHelloEcdhe(
@@ -337,6 +355,30 @@ private func tls13BuildHttpClientHelloFromBase(
         legacyVersion: baseHello.legacyVersion
     )
     tlsEncodeClientHelloHandshake(rebuilt)
+}
+
+private func tls13HttpClientHelloInteropProfileForGroup(
+    serverName: String,
+    group: Int64,
+    alpnProtocols: Array<String>
+): Tls13ClientHelloInteropProfile {
+    Tls13ClientHelloInteropProfile(
+        serverName: serverName.trimAscii().toAsciiLower(),
+        alpnProtocols: tlsHttpNormalizeAlpn(alpnProtocols),
+        cipherSuites: [TLS13_CIPHER_SUITE_AES_128_GCM_SHA256],
+        supportedVersions: [TLS_HTTP_VERSION_TLS13],
+        supportedGroups: [group],
+        keyShareGroups: [group],
+        signatureSchemes: tls13HttpClientHelloSignatureSchemes()
+    )
+}
+
+private func tls13HttpClientHelloSignatureSchemes(): Array<Int64> {
+    [
+        TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256,
+        TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384,
+        TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256
+    ]
 }
 
 private func tls13ValidateHttpNegotiation(

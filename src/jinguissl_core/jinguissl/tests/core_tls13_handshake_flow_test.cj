@@ -1694,6 +1694,39 @@ public class Tls13HandshakeFlowTestSuite {
     }
 
     @TestCase
+    public func testTls13HttpClientHelloInteropProfilePresetEcdheP256(): Unit {
+        let clientPublic = EcPublicKey(P256, P256_2G_X, P256_2G_Y)
+        let ecdheHello = tls13BuildHttpClientHelloEcdhe(
+            clientPublic,
+            "Api.Example.COM",
+            alpnProtocols: ["H2", "http/1.1"]
+        )
+        let profile = tls13HttpClientHelloInteropProfileEcdheP256(
+            "Api.Example.COM",
+            alpnProtocols: ["H2", "http/1.1"]
+        )
+        let report = tls13PrecheckEncodedClientHelloInterop(ecdheHello, profile)
+        @Assert(profile.serverName, TEST_HOST_API)
+        @Assert(profile.alpnProtocols, ["h2", "http/1.1"])
+        @Assert(report.ready, true)
+        @Assert(report.missing.size, 0)
+        @Assert(report.warnings.size, 0)
+    }
+
+    @TestCase
+    public func testTls13HttpClientHelloInteropProfilePresetX25519(): Unit {
+        let x25519Private = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+        let x25519Public = x25519PublicFromPrivate(x25519Private)
+        let x25519Hello = tls13BuildHttpClientHelloX25519(x25519Public, TEST_HOST_API)
+        let profile = tls13HttpClientHelloInteropProfileX25519(TEST_HOST_API)
+        let report = tls13PrecheckEncodedClientHelloInterop(x25519Hello, profile)
+        @Assert(profile.alpnProtocols, ["h2", "http/1.1"])
+        @Assert(report.ready, true)
+        @Assert(report.missing.size, 0)
+        @Assert(report.warnings.size, 0)
+    }
+
+    @TestCase
     public func testTls13HttpClientHelloInteropPrecheckReportsMissingFields(): Unit {
         let clientPublic = EcPublicKey(P256, P256_2G_X, P256_2G_Y)
         let ecdheHello = tls13BuildHttpClientHelloEcdhe(
