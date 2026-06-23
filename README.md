@@ -101,7 +101,7 @@ cjpm test
 
 ```text
 JinguiSSL-core/
-├── src/jinguissl_core/jinguissl/
+├── src/jinguissl_core/
 │   ├── compat/
 │   ├── crypto/
 │   └── tests/
