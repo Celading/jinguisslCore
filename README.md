@@ -54,8 +54,8 @@ jinguissl_core = { git = "https://gitcode.com/CjKu/JinguiCore.git" }
 ### 示例：Ed25519 签名与验签
 
 ```cangjie
-import jinguissl_core.jinguissl.crypto.digest.bytesToHexLower
-import jinguissl_core.jinguissl.crypto.ed25519.*
+import jinguissl_core.crypto.digest.bytesToHexLower
+import jinguissl_core.crypto.ed25519.*
 
 main() {
     let seed = ed25519GeneratePrivateKeySeed()
@@ -101,7 +101,7 @@ cjpm test
 
 ```text
 JinguiSSL-core/
-├── src/jinguissl_core/jinguissl/
+├── src/jinguissl_core/
 │   ├── compat/
 │   ├── crypto/
 │   └── tests/
