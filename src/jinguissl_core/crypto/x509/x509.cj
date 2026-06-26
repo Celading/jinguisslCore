@@ -1,6 +1,7 @@
 package jinguissl_core.crypto.x509
 
 import std.collection.ArrayList
+import std.fs.{File, exists}
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.compliance.FipsProfile
 import jinguissl_core.crypto.digest.{bytesToHexLower, sha256, sha384, sha512}
@@ -519,6 +520,80 @@ public func x509ParsePemChain(pemBundle: String): Array<X509Certificate> {
     certs.toArray()
 }
 
+@When[os == "Linux"]
+public func x509SystemTrustBundleCandidatePaths(): Array<String> {
+    [
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/ca-bundle.pem",
+        "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+        "/etc/ssl/cert.pem"
+    ]
+}
+
+@When[os == "macOS"]
+public func x509SystemTrustBundleCandidatePaths(): Array<String> {
+    [
+        "/etc/ssl/cert.pem",
+        "/opt/homebrew/etc/ca-certificates/cert.pem",
+        "/usr/local/etc/ca-certificates/cert.pem",
+        "/opt/homebrew/etc/openssl@3/cert.pem",
+        "/usr/local/etc/openssl@3/cert.pem"
+    ]
+}
+
+@When[os == "Windows"]
+public func x509SystemTrustBundleCandidatePaths(): Array<String> {
+    []
+}
+
+@When[os != "Linux" && os != "macOS" && os != "Windows"]
+public func x509SystemTrustBundleCandidatePaths(): Array<String> {
+    []
+}
+
+/**
+ * x509LoadSystemTrustAnchors.
+ *
+ * Loads PEM-bundle trust anchors from common platform paths plus optional
+ * caller-supplied bundle paths. Windows Root Store extraction is intentionally
+ * not claimed here; Windows callers can pass an exported PEM bundle path until
+ * a native store reader lands.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func x509LoadSystemTrustAnchors(extraPemBundlePaths!: Array<String> = []): Array<X509Certificate> {
+    let anchors = ArrayList<X509Certificate>()
+    let paths = concatStringArrays(x509SystemTrustBundleCandidatePaths(), extraPemBundlePaths)
+    for (path in paths) {
+        appendTrustAnchorsFromPemPath(anchors, path)
+    }
+    anchors.toArray()
+}
+
+/**
+ * x509CreateSystemTrustPolicy.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func x509CreateSystemTrustPolicy(
+    intermediates!: Array<X509Certificate> = [],
+    extraPemBundlePaths!: Array<String> = [],
+    requiredLeafDnsName!: String = "",
+    validationTime!: String = ""
+): X509VerificationPolicy {
+    let anchors = x509LoadSystemTrustAnchors(extraPemBundlePaths: extraPemBundlePaths)
+    if (anchors.size == 0) {
+        throw CryptoException(Unsupported, "no system PEM trust anchor bundle is available")
+    }
+    X509VerificationPolicy(
+        anchors,
+        intermediates: intermediates,
+        requiredLeafDnsName: requiredLeafDnsName,
+        validationTime: validationTime
+    )
+}
+
 /**
  * x509ParseCrlDer.
  *
@@ -727,6 +802,51 @@ public func x509BuildSimpleChain(leaf: X509Certificate, candidates: Array<X509Ce
         break
     }
     chain.toArray()
+}
+
+private func x509BuildTrustedChain(
+    leaf: X509Certificate,
+    trustAnchors: Array<X509Certificate>,
+    intermediates: Array<X509Certificate>
+): Array<X509Certificate> {
+    let candidates = concatCertificateArrays(intermediates, trustAnchors)
+    let chain = ArrayList<X509Certificate>()
+    chain.add(leaf)
+    if (x509ExtendTrustedChain(chain, candidates, trustAnchors, 0)) {
+        return chain.toArray()
+    }
+    []
+}
+
+private func x509ExtendTrustedChain(
+    chain: ArrayList<X509Certificate>,
+    candidates: Array<X509Certificate>,
+    trustAnchors: Array<X509Certificate>,
+    depth: Int64
+): Bool {
+    let current = chain[chain.size - 1]
+    if (let Some(_) <- findTrustAnchor(current, trustAnchors)) {
+        return true
+    }
+    if (current.isSelfIssued()) {
+        return false
+    }
+    if (depth > candidates.size) {
+        return false
+    }
+
+    let issuers = findIssuerCandidates(current, candidates)
+    for (issuer in issuers) {
+        if (containsCertificate(chain, issuer)) {
+            continue
+        }
+        chain.add(issuer)
+        if (x509ExtendTrustedChain(chain, candidates, trustAnchors, depth + 1)) {
+            return true
+        }
+        _ = chain.remove(at: chain.size - 1)
+    }
+    false
 }
 
 public func x509NameFindFirstValue(name: X509Name, oid: String): ?String {
@@ -1257,10 +1377,9 @@ public func x509CreateSelfSignedEcCertificate(config: X509SelfSignedConfig, priv
  * @throws CryptoException 当操作失败时抛出
  */
 public func x509VerifyCertificateChain(leaf: X509Certificate, policy: X509VerificationPolicy): X509VerificationResult {
-    let candidates = concatCertificateArrays(policy.intermediates, policy.trustAnchors)
-    let chain = x509BuildSimpleChain(leaf, candidates)
+    let chain = x509BuildTrustedChain(leaf, policy.trustAnchors, policy.intermediates)
     if (chain.size == 0) {
-        throw CryptoException(ParseError, "X509 chain builder returned empty chain")
+        throw CryptoException(ParseError, "X509 chain does not terminate at a trusted anchor")
     }
 
     let trustAnchor = findTrustAnchor(chain[chain.size - 1], policy.trustAnchors)
@@ -2415,6 +2534,39 @@ private func findTrustAnchor(last: X509Certificate, trustAnchors: Array<X509Cert
     None
 }
 
+private func concatStringArrays(left: Array<String>, right: Array<String>): Array<String> {
+    let out = ArrayList<String>()
+    for (item in left) {
+        out.add(item)
+    }
+    for (item in right) {
+        out.add(item)
+    }
+    out.toArray()
+}
+
+private func appendTrustAnchorsFromPemPath(out: ArrayList<X509Certificate>, path: String): Unit {
+    let normalized = path.trimAscii()
+    if (normalized.size == 0 || !exists(normalized)) {
+        return
+    }
+    try {
+        let pem = String.fromUtf8(File.readFrom(normalized))
+        let certs = x509ParsePemChain(pem)
+        for (cert in certs) {
+            appendUniqueCertificate(out, cert)
+        }
+    } catch (_: Exception) {
+        return
+    }
+}
+
+private func appendUniqueCertificate(out: ArrayList<X509Certificate>, cert: X509Certificate): Unit {
+    if (!containsCertificate(out, cert)) {
+        out.add(cert)
+    }
+}
+
 private func x509FindCrlForIssuer(issuer: X509Certificate, crls: Array<X509Crl>): ?X509Crl {
     let matched = ArrayList<X509Crl>()
     for (crl in crls) {
@@ -3287,6 +3439,14 @@ private func isAsciiDigits(text: String): Bool {
 }
 
 private func findIssuer(cert: X509Certificate, candidates: Array<X509Certificate>): ?X509Certificate {
+    let matched = findIssuerCandidates(cert, candidates)
+    if (matched.size == 0) {
+        return None
+    }
+    Some(matched[0])
+}
+
+private func findIssuerCandidates(cert: X509Certificate, candidates: Array<X509Certificate>): Array<X509Certificate> {
     let matched = ArrayList<X509Certificate>()
     for (candidate in candidates) {
         if (bytesEqual(cert.der, candidate.der)) {
@@ -3298,28 +3458,40 @@ private func findIssuer(cert: X509Certificate, candidates: Array<X509Certificate
     }
 
     if (matched.size == 0) {
-        return None
+        return []
     }
     if (matched.size == 1) {
-        return Some(matched[0])
+        return matched.toArray()
     }
 
     let certAki = x509ExtractAuthorityKeyIdentifier(cert)
     if (let Some(aki) <- certAki) {
         if (let Some(akiKeyId) <- aki.keyIdentifier) {
+            let preferred = ArrayList<X509Certificate>()
+            let fallback = ArrayList<X509Certificate>()
             var i = 0
             while (i < matched.size) {
                 let candidateSki = x509ExtractSubjectKeyIdentifier(matched[i])
                 if (let Some(ski) <- candidateSki) {
                     if (bytesEqual(akiKeyId, ski)) {
-                        return Some(matched[i])
+                        preferred.add(matched[i])
+                    } else {
+                        fallback.add(matched[i])
                     }
+                } else {
+                    fallback.add(matched[i])
                 }
                 i += 1
             }
+            if (preferred.size > 0) {
+                for (item in fallback) {
+                    preferred.add(item)
+                }
+                return preferred.toArray()
+            }
         }
     }
-    return Some(matched[0])
+    matched.toArray()
 }
 
 private func containsCertificate(chain: ArrayList<X509Certificate>, cert: X509Certificate): Bool {
