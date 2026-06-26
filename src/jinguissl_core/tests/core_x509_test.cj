@@ -8,7 +8,7 @@ import jinguissl_core.crypto.digest.sha256
 import jinguissl_core.crypto.ecc.*
 import jinguissl_core.crypto.error.CryptoException
 import jinguissl_core.crypto.rsa.*
-import jinguissl_core.crypto.x509.{X509AuthorityKeyIdentifier, X509Certificate, X509Crl, X509Extension, X509SelfSignedConfig, X509VerificationPolicy, X509_KEY_USAGE_DIGITAL_SIGNATURE, X509_KEY_USAGE_KEY_AGREEMENT, X509_KEY_USAGE_KEY_CERT_SIGN, X509_KEY_USAGE_KEY_ENCIPHERMENT, X509_OID_AUTHORITY_KEY_IDENTIFIER, X509_OID_BASIC_CONSTRAINTS, X509_OID_CERTIFICATE_POLICIES, X509_OID_CRL_DISTRIBUTION_POINTS, X509_OID_ECDSA_WITH_SHA256, X509_OID_ECDSA_WITH_SHA384, X509_OID_EKU_CLIENT_AUTH, X509_OID_EKU_SERVER_AUTH, X509_OID_EXTENDED_KEY_USAGE, X509_OID_KEY_USAGE, X509_OID_SHA256_WITH_RSA, X509_OID_SUBJECT_ALT_NAME, X509_OID_SUBJECT_KEY_IDENTIFIER, x509BuildSimpleChain, x509CreateSelfSignedEcCertificate, x509CreateSelfSignedRsaCertificate, x509DecodeAuthorityKeyIdentifierFromExtension, x509DecodeCertificatePoliciesFromExtension, x509DecodeCrlDistributionPointsFromExtension, x509DecodeExtendedKeyUsageFromExtension, x509DecodeKeyUsageFromExtension, x509DecodeSubjectAlternativeNameDnsFromExtension, x509DecodeSubjectKeyIdentifierFromExtension, x509ExtractAuthorityKeyIdentifier, x509ExtractCertificatePolicyOids, x509ExtractCrlDistributionPointUris, x509ExtractEcPublicKey, x509ExtractExtendedKeyUsageOids, x509ExtractRsaPublicKey, x509ExtractSubjectAlternativeDnsNames, x509ExtractSubjectKeyIdentifier, x509FindExtension, x509ParseCrlPem, x509ParseDer, x509ParseEcPrivateKeyPkcs8Der, x509ParseEcPrivateKeyPkcs8Pem, x509ParsePem, x509ParsePemChain, x509ParseRsaPrivateKeyPkcs1Der, x509ParseRsaPrivateKeyPkcs1Pem, x509ParseRsaPrivateKeyPkcs8Der, x509ParseRsaPrivateKeyPkcs8Pem, x509VerifyCertificateChain, x509VerifyCertificateChainWithProfile, x509VerifyCrlSignatureWithIssuer, x509VerifySignatureWithIssuer}
+import jinguissl_core.crypto.x509.{X509AuthorityKeyIdentifier, X509Certificate, X509Crl, X509Extension, X509SelfSignedConfig, X509VerificationPolicy, X509_KEY_USAGE_DIGITAL_SIGNATURE, X509_KEY_USAGE_KEY_AGREEMENT, X509_KEY_USAGE_KEY_CERT_SIGN, X509_KEY_USAGE_KEY_ENCIPHERMENT, X509_OID_AUTHORITY_KEY_IDENTIFIER, X509_OID_BASIC_CONSTRAINTS, X509_OID_CERTIFICATE_POLICIES, X509_OID_CRL_DISTRIBUTION_POINTS, X509_OID_ECDSA_WITH_SHA256, X509_OID_ECDSA_WITH_SHA384, X509_OID_EKU_CLIENT_AUTH, X509_OID_EKU_SERVER_AUTH, X509_OID_EXTENDED_KEY_USAGE, X509_OID_KEY_USAGE, X509_OID_SHA256_WITH_RSA, X509_OID_SUBJECT_ALT_NAME, X509_OID_SUBJECT_KEY_IDENTIFIER, x509BuildSimpleChain, x509CreateSelfSignedEcCertificate, x509CreateSelfSignedRsaCertificate, x509CreateSystemTrustPolicy, x509DecodeAuthorityKeyIdentifierFromExtension, x509DecodeCertificatePoliciesFromExtension, x509DecodeCrlDistributionPointsFromExtension, x509DecodeExtendedKeyUsageFromExtension, x509DecodeKeyUsageFromExtension, x509DecodeSubjectAlternativeNameDnsFromExtension, x509DecodeSubjectKeyIdentifierFromExtension, x509ExtractAuthorityKeyIdentifier, x509ExtractCertificatePolicyOids, x509ExtractCrlDistributionPointUris, x509ExtractEcPublicKey, x509ExtractExtendedKeyUsageOids, x509ExtractRsaPublicKey, x509ExtractSubjectAlternativeDnsNames, x509ExtractSubjectKeyIdentifier, x509FindExtension, x509LoadSystemTrustAnchors, x509ParseCrlPem, x509ParseDer, x509ParseEcPrivateKeyPkcs8Der, x509ParseEcPrivateKeyPkcs8Pem, x509ParsePem, x509ParsePemChain, x509ParseRsaPrivateKeyPkcs1Der, x509ParseRsaPrivateKeyPkcs1Pem, x509ParseRsaPrivateKeyPkcs8Der, x509ParseRsaPrivateKeyPkcs8Pem, x509SystemTrustBundleCandidatePaths, x509VerifyCertificateChain, x509VerifyCertificateChainWithProfile, x509VerifyCrlSignatureWithIssuer, x509VerifySignatureWithIssuer}
 
 type X509KeyValueVector = HashMap<String, String>
 
@@ -130,6 +130,44 @@ public class X509TestSuite {
     }
 
     @TestCase
+    public func testVerifyChainBacktracksPastUntrustedCrossSignedCandidate(): Unit {
+        let leaf = x509ParsePem(readText("testdata/x509/policy_leaf.pem"))
+        let intermediate = x509ParsePem(readText("testdata/x509/policy_intermediate.pem"))
+        let root = x509ParsePem(readText("testdata/x509/policy_root.pem"))
+        let untrustedSameSubject = cloneWithDifferentDer(root)
+
+        let policy = X509VerificationPolicy(
+            [root],
+            intermediates: [intermediate, untrustedSameSubject],
+            validationTime: "230101000000Z"
+        )
+        let result = x509VerifyCertificateChain(leaf, policy)
+        @Assert(result.chain.size, 3)
+        @Assert(result.chain[2].der, root.der)
+        @Assert(result.trustAnchor.der, root.der)
+    }
+
+    @TestCase
+    public func testSystemTrustPemBundleHelpersAcceptExplicitBundlePath(): Unit {
+        let root = x509ParsePem(readText("testdata/x509/policy_root.pem"))
+        let paths = x509SystemTrustBundleCandidatePaths()
+        @Assert(paths.size >= 0, true)
+
+        let anchors = x509LoadSystemTrustAnchors(extraPemBundlePaths: ["testdata/x509/policy_root.pem"])
+        @Assert(containsCertificateDer(anchors, root), true)
+
+        let leaf = x509ParsePem(readText("testdata/x509/policy_leaf.pem"))
+        let intermediate = x509ParsePem(readText("testdata/x509/policy_intermediate.pem"))
+        let policy = x509CreateSystemTrustPolicy(
+            intermediates: [intermediate],
+            extraPemBundlePaths: ["testdata/x509/policy_root.pem"],
+            validationTime: "230101000000Z"
+        )
+        let result = x509VerifyCertificateChain(leaf, policy)
+        @Assert(result.trustAnchor.der, root.der)
+    }
+
+    @TestCase
     public func testVerifyBoringSslPolicyChainWithFipsProfile(): Unit {
         let leaf = x509ParsePem(readText("testdata/x509/policy_leaf.pem"))
         let intermediate = x509ParsePem(readText("testdata/x509/policy_intermediate.pem"))
@@ -193,7 +231,7 @@ public class X509TestSuite {
         }
 
         let unknownAnchorPolicy = X509VerificationPolicy(
-            [leaf],
+            [makeUnrelatedTrustAnchor()],
             intermediates: [intermediate],
             validationTime: "230101000000Z"
         )
@@ -843,6 +881,45 @@ private func readText(path: String): String {
         throw Exception("file not found: ${path}")
     }
     String.fromUtf8(File.readFrom(path))
+}
+
+private func cloneWithDifferentDer(cert: X509Certificate): X509Certificate {
+    let der = cert.der.clone()
+    der[der.size - 1] = UInt8(der[der.size - 1]) ^ UInt8(0x01)
+    X509Certificate(
+        der,
+        cert.tbsDer,
+        cert.serialNumber,
+        cert.signatureAlgorithmOid,
+        cert.issuer,
+        cert.subject,
+        cert.notBefore,
+        cert.notAfter,
+        cert.subjectPublicKeyInfoDer,
+        cert.extensions,
+        cert.signatureValue
+    )
+}
+
+private func makeUnrelatedTrustAnchor(): X509Certificate {
+    x509CreateSelfSignedEcCertificate(
+        X509SelfSignedConfig(
+            "unrelated-trust-anchor.local",
+            serialNumber: [UInt8(0x7F)],
+            notBefore: "220101000000Z",
+            notAfter: "300101000000Z"
+        ),
+        EcPrivateKey(P256, BigNum.one())
+    )
+}
+
+private func containsCertificateDer(certs: Array<X509Certificate>, expected: X509Certificate): Bool {
+    for (cert in certs) {
+        if (cert.der == expected.der) {
+            return true
+        }
+    }
+    false
 }
 
 private func loadRsa2048PrivateKey(): RsaPrivateKey {

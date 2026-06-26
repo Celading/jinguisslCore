@@ -11,6 +11,10 @@ foreign func arc4random_buf(buffer: CPointer<UInt8>, size: UIntNative): Unit
 @When[os == "Linux"]
 foreign func getentropy(buffer: CPointer<UInt8>, size: UIntNative): Int32
 
+@When[os == "Windows"]
+@CallingConv[STDCALL]
+foreign func SystemFunction036(buffer: CPointer<UInt8>, size: UInt32): Bool
+
 /**
  * bytesToUInt32BE.
  *
@@ -155,6 +159,9 @@ private func fillSystemEntropy(out: Array<Byte>): Bool {
     if (fillSystemEntropyLinux(out)) {
         return true
     }
+    if (fillSystemEntropyWindows(out)) {
+        return true
+    }
     false
 }
 
@@ -214,4 +221,24 @@ private func fillLinuxGetentropyChunk(chunk: Array<Byte>): Bool {
             releaseArrayRawData<Byte>(raw)
         }
     }
+}
+
+@When[os == "Windows"]
+private func fillSystemEntropyWindows(out: Array<Byte>): Bool {
+    unsafe {
+        var raw = acquireArrayRawData<Byte>(out)
+        try {
+            SystemFunction036(raw.pointer, UInt32(out.size))
+        } finally {
+            releaseArrayRawData<Byte>(raw)
+        }
+    }
+}
+
+@When[os != "Windows"]
+private func fillSystemEntropyWindows(_out: Array<Byte>): Bool {
+    if (_out.size < 0) {
+        return false
+    }
+    false
 }
