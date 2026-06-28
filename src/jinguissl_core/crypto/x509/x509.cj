@@ -552,6 +552,26 @@ public func x509SystemTrustBundleCandidatePaths(): Array<String> {
     []
 }
 
+@When[os == "Linux"]
+public func x509SystemTrustMaterialSupportKind(): String {
+    "pem-bundle-candidates"
+}
+
+@When[os == "macOS"]
+public func x509SystemTrustMaterialSupportKind(): String {
+    "pem-bundle-candidates"
+}
+
+@When[os == "Windows"]
+public func x509SystemTrustMaterialSupportKind(): String {
+    "caller-supplied-pem-only"
+}
+
+@When[os != "Linux" && os != "macOS" && os != "Windows"]
+public func x509SystemTrustMaterialSupportKind(): String {
+    "caller-supplied-pem-only"
+}
+
 /**
  * x509LoadSystemTrustAnchors.
  *
