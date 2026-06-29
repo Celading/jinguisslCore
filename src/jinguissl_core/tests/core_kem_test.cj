@@ -3,6 +3,7 @@ package jinguissl_core.tests
 import std.fs.*
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.compliance.FipsProfile
+import jinguissl_core.crypto.digest.bytesToHexLower
 import jinguissl_core.crypto.ecc.*
 import jinguissl_core.crypto.error.CryptoException
 import jinguissl_core.crypto.kem.*
@@ -32,6 +33,44 @@ public class KemTestSuite {
         @Assert(ciphertext.size, 256)
         @Assert(secretEnc.size, 48)
         @Assert(secretEnc, secretDec)
+    }
+
+    @TestCase
+    public func testRsaKemKdfInfoAndLengthBoundary(): Unit {
+        let privateKey = loadRsa2048PrivateKey()
+        let (ciphertext, secretA) = rsaKemEncapsulate(
+            privateKey.publicKey,
+            sharedSecretLen: 32,
+            info: "kdf-info-a".toArray()
+        )
+        let decA = rsaKemDecapsulate(
+            privateKey,
+            ciphertext,
+            sharedSecretLen: 32,
+            info: "kdf-info-a".toArray()
+        )
+        let decB = rsaKemDecapsulate(
+            privateKey,
+            ciphertext,
+            sharedSecretLen: 32,
+            info: "kdf-info-b".toArray()
+        )
+        @Assert(secretA, decA)
+        @Assert(bytesToHexLower(decA) != bytesToHexLower(decB), true)
+
+        try {
+            _ = rsaKemDecapsulate(privateKey, ciphertext, sharedSecretLen: 0)
+            @Fail("RSA-KEM should reject zero-length shared secret requests")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "INVALID_ARGUMENT")
+        }
+
+        try {
+            _ = rsaKemDecapsulate(privateKey, ciphertext, sharedSecretLen: 8161)
+            @Fail("RSA-KEM should reject HKDF output beyond 255 SHA-256 blocks")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "OUT_OF_BOUNDS")
+        }
     }
 
     @TestCase
