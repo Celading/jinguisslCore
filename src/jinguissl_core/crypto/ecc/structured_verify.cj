@@ -6,6 +6,7 @@ import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
 
 private let ES256_P256_COORDINATE_BYTES: Int64 = 32
 private let ES256_P256_DIGEST_BYTES: Int64 = 32
+private let ES256_P256_SCALAR_BYTES: Int64 = 32
 private let DER_TAG_INTEGER: Int64 = 0x02
 private let DER_TAG_SEQUENCE: Int64 = 0x30
 
@@ -180,9 +181,20 @@ private func decodeEs256P256DerSignature(signatureDer: Array<Byte>): (BigNum, Bi
         throw CryptoException(ParseError, "ECDSA signature has trailing bytes")
     }
 
-    let r = BigNum.fromBytesBE(parseStructuredVerifyPositiveInteger(rElement.value, "ECDSA signature.r"))
-    let s = BigNum.fromBytesBE(parseStructuredVerifyPositiveInteger(sElement.value, "ECDSA signature.s"))
+    let r = BigNum.fromBytesBE(parseEs256P256SignatureScalar(rElement.value, "ECDSA signature.r"))
+    let s = BigNum.fromBytesBE(parseEs256P256SignatureScalar(sElement.value, "ECDSA signature.s"))
     (r, s)
+}
+
+private func parseEs256P256SignatureScalar(
+    encoded: Array<Byte>,
+    label: String
+): Array<Byte> {
+    let scalar = parseStructuredVerifyPositiveInteger(encoded, label)
+    if (scalar.size > ES256_P256_SCALAR_BYTES) {
+        throw CryptoException(ParseError, "${label} INTEGER exceeds ES256/P-256 scalar size")
+    }
+    scalar
 }
 
 private func readStructuredVerifyDerElement(
@@ -263,6 +275,13 @@ private func parseStructuredVerifyPositiveInteger(
     }
     if ((UInt8(encoded[0]) & UInt8(0x80)) != UInt8(0)) {
         throw CryptoException(ParseError, "${label} INTEGER must be non-negative")
+    }
+    if (
+        encoded.size > 1 &&
+        UInt8(encoded[0]) == UInt8(0) &&
+        (UInt8(encoded[1]) & UInt8(0x80)) == UInt8(0)
+    ) {
+        throw CryptoException(ParseError, "${label} INTEGER is not minimally encoded")
     }
 
     let trimmed = trimStructuredVerifyLeadingZeros(encoded)
