@@ -280,6 +280,55 @@ public class SshTestSuite {
     }
 
     @TestCase
+    public func testSshKdfSeparatesDirectionsAndSessionId(): Unit {
+        let sharedSecret = incrementalBytes(32, start: 17)
+        let exchangeHash = incrementalBytes(32, start: 71)
+        let sessionId = incrementalBytes(32, start: 109)
+        let negotiated = SshNegotiatedAlgorithms(
+            "curve25519-sha256",
+            "ssh-ed25519",
+            "aes128-ctr",
+            "aes128-ctr",
+            "hmac-sha2-256",
+            "hmac-sha2-256",
+            "none",
+            "none"
+        )
+
+        let derived = sshDeriveSessionKeysSha256(sharedSecret, exchangeHash, sessionId, negotiated)
+        @Assert(bytesToHexLower(derived.clientToServer.iv) != bytesToHexLower(derived.serverToClient.iv), true)
+        @Assert(
+            bytesToHexLower(derived.clientToServer.encryptionKey) !=
+                bytesToHexLower(derived.serverToClient.encryptionKey),
+            true
+        )
+        @Assert(
+            bytesToHexLower(derived.clientToServer.integrityKey) !=
+                bytesToHexLower(derived.serverToClient.integrityKey),
+            true
+        )
+
+        let rebound = sshDeriveSessionKeysSha256(
+            sharedSecret,
+            exchangeHash,
+            incrementalBytes(32, start: 147),
+            negotiated
+        )
+        @Assert(
+            bytesToHexLower(derived.clientToServer.encryptionKey) !=
+                bytesToHexLower(rebound.clientToServer.encryptionKey),
+            true
+        )
+
+        try {
+            _ = sshDeriveSessionKeysSha256(sharedSecret[0..31], exchangeHash, sessionId, negotiated)
+            @Fail("SSH KDF should reject non-X25519 shared secret length")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "INVALID_ARGUMENT")
+        }
+    }
+
+    @TestCase
     public func testCompleteInitialKeyExchangeX25519AndSupportProbes(): Unit {
         let clientPrivate = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
         let serverPrivate = hexToBytes("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
