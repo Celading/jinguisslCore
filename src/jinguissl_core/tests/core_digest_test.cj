@@ -1,6 +1,7 @@
 package jinguissl_core.tests
 
 import jinguissl_core.crypto.digest.*
+import jinguissl_core.crypto.error.CryptoException
 
 @Test
 public class CoreDigestTestSuite {
@@ -172,6 +173,31 @@ public class CoreDigestTestSuite {
             let prk = Array<Byte>(32, repeat: 0xab)
             let result = hkdfExpand(HashAlgorithm.SHA256, prk, [], 0)
             @Assert(result.size, 0)
+        }
+
+        @TestCase
+        public func testHkdfExpandBoundaryFailures(): Unit {
+            let prk = Array<Byte>(32, repeat: 0xab)
+            try {
+                _ = hkdfExpand(HashAlgorithm.SHA256, prk, [], -1)
+                @Fail("negative HKDF output length should be rejected")
+            } catch (e: CryptoException) {
+                @Assert(e.code.toString(), "INVALID_ARGUMENT")
+            }
+
+            try {
+                _ = hkdfExpand(HashAlgorithm.SHA256, [], [], 1)
+                @Fail("empty HKDF PRK should be rejected")
+            } catch (e: CryptoException) {
+                @Assert(e.code.toString(), "INVALID_ARGUMENT")
+            }
+
+            try {
+                _ = hkdfExpand(HashAlgorithm.SHA256, prk, [], 8161)
+                @Fail("HKDF-SHA256 output beyond 255 blocks should be rejected")
+            } catch (e: CryptoException) {
+                @Assert(e.code.toString(), "OUT_OF_BOUNDS")
+            }
         }
 
         @TestCase
