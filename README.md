@@ -81,6 +81,27 @@ main() {
 | `crypto/ssh` | SSH transport、host verification、KEX |
 | `compat/bn` | 大数兼容与基础支持 |
 
+## 系统证书信任材料
+
+`JinguiSSL-core` 当前会处理一部分系统证书路径，但不是“全平台原生信任库自动接管”。
+
+- Linux / OpenHarmony 同内核目标：通过常见 PEM bundle 候选路径加载信任锚，并支持调用方额外传入 PEM bundle 路径。
+- macOS：通过常见 PEM bundle 候选路径加载信任锚，并支持调用方额外传入 PEM bundle 路径；当前不声明原生 Keychain 集成。
+- Windows：当前不声明原生 Root Store 枚举；调用方可以传入导出的 PEM bundle 路径。
+- HarmonyOS：当前按 Linux aarch64 代理证明只能称为准支持，真实设备信任材料验证完成前不声明正式支持。
+
+如果你需要在应用层创建系统信任策略，可以使用：
+
+```cangjie
+import jinguissl_core.crypto.x509.{x509CreateSystemTrustPolicy, x509SystemTrustMaterialSupportKind}
+
+main() {
+    println(x509SystemTrustMaterialSupportKind())
+    let policy = x509CreateSystemTrustPolicy(extraPemBundlePaths: ["./roots.pem"])
+    println(policy.trustAnchors.size)
+}
+```
+
 ## 什么时候该直接使用 Core
 
 - 你在写 TLS / SSH / PKI 相关中间层或框架

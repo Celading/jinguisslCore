@@ -440,34 +440,89 @@ private func rsaPrivateTransform(key: RsaPrivateKey, input: Array<Byte>): Array<
     if (m.cmp(modulus) >= 0) {
         throw CryptoException(InvalidArgument, "RSA input representative out of range")
     }
+    // Security policy: never continue with unblinded private exponentiation if blinding cannot be prepared.
     let (blinded, blindInverse) = rsaBlindInput(m, key.publicKey, k)
+    let blindedResult = blinded.modExp(key.privateExponent, modulus)
+    blindedResult.mul(blindInverse).mod(modulus).toBytesBE(paddedLen: k)
+}
+
+/** @internal - deterministic RSA blinding policy hook for Core tests; not a contract facade. */
+public func rsaPrivateTransformWithBlindingCandidatesForTest(
+    key: RsaPrivateKey,
+    input: Array<Byte>,
+    candidates: Array<BigNum>
+): Array<Byte> {
+    let modulus = key.publicKey.modulus
+    let k = modulusByteLength(modulus)
+    if (input.size != k) {
+        throw CryptoException(InvalidArgument, "RSA input length mismatch")
+    }
+    let m = BigNum.fromBytesBE(input)
+    if (m.cmp(modulus) >= 0) {
+        throw CryptoException(InvalidArgument, "RSA input representative out of range")
+    }
+    let (blinded, blindInverse) = rsaBlindInputWithCandidatesForTest(m, key.publicKey, candidates)
     let blindedResult = blinded.modExp(key.privateExponent, modulus)
     blindedResult.mul(blindInverse).mod(modulus).toBytesBE(paddedLen: k)
 }
 
 private func rsaBlindInput(message: BigNum, publicKey: RsaPublicKey, byteLen: Int64): (BigNum, BigNum) {
     let modulus = publicKey.modulus
-    let one = BigNum.one()
     var attempt = 0
 
     while (attempt < RSA_BLINDING_MAX_ATTEMPTS) {
         let r = BigNum.fromBytesBE(csprngBytes(byteLen)).mod(modulus)
-        if (r.cmp(one) <= 0 || BigNum.gcd(r, modulus).cmp(one) != 0) {
-            attempt += 1
-            continue
+        let (usable, blinded, rInverse) = rsaTryBlindInputWithCandidate(message, publicKey, r)
+        if (usable) {
+            return (blinded, rInverse)
         }
-
-        let rInverse = try {
-            r.modInverse(modulus)
-        } catch (_: CryptoException) {
-            attempt += 1
-            continue
-        }
-        let rToPublicExponent = r.modExp(publicKey.exponent, modulus)
-        return (message.mul(rToPublicExponent).mod(modulus), rInverse)
+        attempt += 1
     }
 
     throw CryptoException(InternalError, "RSA blinding factor generation exceeded attempt budget")
+}
+
+private func rsaBlindInputWithCandidatesForTest(
+    message: BigNum,
+    publicKey: RsaPublicKey,
+    candidates: Array<BigNum>
+): (BigNum, BigNum) {
+    if (candidates.size == 0) {
+        throw CryptoException(InvalidArgument, "RSA blinding probe candidates must not be empty")
+    }
+
+    let modulus = publicKey.modulus
+    var attempt = 0
+    while (attempt < RSA_BLINDING_MAX_ATTEMPTS) {
+        let r = candidates[attempt % candidates.size].mod(modulus)
+        let (usable, blinded, rInverse) = rsaTryBlindInputWithCandidate(message, publicKey, r)
+        if (usable) {
+            return (blinded, rInverse)
+        }
+        attempt += 1
+    }
+
+    throw CryptoException(InternalError, "RSA blinding factor generation exceeded attempt budget")
+}
+
+private func rsaTryBlindInputWithCandidate(
+    message: BigNum,
+    publicKey: RsaPublicKey,
+    r: BigNum
+): (Bool, BigNum, BigNum) {
+    let modulus = publicKey.modulus
+    let one = BigNum.one()
+    if (r.cmp(one) <= 0 || BigNum.gcd(r, modulus).cmp(one) != 0) {
+        return (false, BigNum.zero(), BigNum.zero())
+    }
+
+    let rInverse = try {
+        r.modInverse(modulus)
+    } catch (_: CryptoException) {
+        return (false, BigNum.zero(), BigNum.zero())
+    }
+    let rToPublicExponent = r.modExp(publicKey.exponent, modulus)
+    (true, message.mul(rToPublicExponent).mod(modulus), rInverse)
 }
 
 private func rsaPublicTransform(key: RsaPublicKey, input: Array<Byte>): Array<Byte> {
