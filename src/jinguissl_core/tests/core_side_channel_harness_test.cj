@@ -2,6 +2,7 @@ package jinguissl_core.tests
 
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.ed25519.{ed25519PublicKeyFromSeed, ed25519Sign, ed25519Verify}
+import jinguissl_core.crypto.error.CryptoException
 import jinguissl_core.crypto.rsa.*
 
 @Test
@@ -24,6 +25,25 @@ public class CoreSideChannelHarnessTestSuite {
             @Assert(signature, expected)
             @Assert(rsaVerifyPkcs1v15(publicKey, digest, signature), true)
             i += 1
+        }
+    }
+
+    @TestCase
+    public func testRsaBlindingFailurePolicyFailsClosedWithoutUnblindedFallback(): Unit {
+        let privateKey = harnessRsaVectorKey()
+        let input = Array<Byte>(256, repeat: 0)
+        input[input.size - 1] = UInt8(0x01)
+        let invalidCandidates: Array<BigNum> = [
+            BigNum.zero(),
+            BigNum.one(),
+            privateKey.publicKey.modulus
+        ]
+
+        try {
+            rsaPrivateTransformWithBlindingCandidatesForTest(privateKey, input, invalidCandidates)
+            @Fail("RSA private transform should fail closed when blinding candidates are unusable")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "INTERNAL_ERROR")
         }
     }
 

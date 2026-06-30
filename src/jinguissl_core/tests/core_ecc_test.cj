@@ -2,6 +2,7 @@ package jinguissl_core.tests
 
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.compliance.FipsProfile
+import jinguissl_core.crypto.digest.sha256
 import jinguissl_core.crypto.ecc.*
 import jinguissl_core.crypto.error.CryptoException
 
@@ -139,6 +140,105 @@ public class CoreEccTestSuite {
             case None => @Fail("expected error code")
         }
     }
+
+    @TestCase
+    public func testStructuredVerifyValidAndTamperedPayload(): Unit {
+        let privateKey = EcPrivateKey(P256, BigNum.one())
+        let publicKey = EcPublicKey(
+            P256,
+            BigNum.fromHex(P256_GX_HEX),
+            BigNum.fromHex(P256_GY_HEX)
+        )
+        let signedBytes = "structured verify payload".toArray()
+        let digest = sha256(signedBytes)
+        let (r, s) = ecdsaSign(privateKey, digest)
+        let derSignature = encodeDerSignature(r, s)
+        let xBytes = publicKey.x.toBytesBE(paddedLen: 32)
+        let yBytes = publicKey.y.toBytesBE(paddedLen: 32)
+
+        let verified = tryEs256P256VerifyStructuredRequest(
+            Es256P256StructuredVerifyRequest(xBytes, yBytes, signedBytes, derSignature)
+        )
+        @Assert(verified.ok, true)
+        let verifiedResult = requireStructuredVerifyResult(verified)
+        @Assert(verifiedResult.signatureVerified, true)
+        @Assert(verifiedResult.digestSha256, digest)
+
+        let tamperedBytes = "structured verify payload!".toArray()
+        let tampered = tryEs256P256VerifyStructuredRequest(
+            Es256P256StructuredVerifyRequest(xBytes, yBytes, tamperedBytes, derSignature)
+        )
+        @Assert(tampered.ok, true)
+        let tamperedResult = requireStructuredVerifyResult(tampered)
+        @Assert(tamperedResult.signatureVerified, false)
+        @Assert(tamperedResult.digestSha256, sha256(tamperedBytes))
+    }
+
+    @TestCase
+    public func testStructuredVerifyRejectsInvalidPublicPoint(): Unit {
+        let zeroCoordinate = Array<Byte>(32, repeat: 0)
+        let derSignature = encodeDerSignatureFromIntegerContents([UInt8(0x01)], [UInt8(0x01)])
+        let request = Es256P256StructuredVerifyRequest(
+            zeroCoordinate,
+            zeroCoordinate,
+            "structured verify payload".toArray(),
+            derSignature
+        )
+        let outcome = tryEs256P256VerifyStructuredRequest(request)
+        assertStructuredVerifyFailureCode(outcome, "INVALID_ARGUMENT")
+    }
+
+    @TestCase
+    public func testStructuredVerifyRejectsTrailingDerInteger(): Unit {
+        let xBytes = BigNum.fromHex(P256_GX_HEX).toBytesBE(paddedLen: 32)
+        let yBytes = BigNum.fromHex(P256_GY_HEX).toBytesBE(paddedLen: 32)
+        let rDer = encodeDerInteger([UInt8(0x01)])
+        let sDer = encodeDerInteger([UInt8(0x01)])
+        let trailingDer = encodeDerInteger([UInt8(0x01)])
+        let derSignature = encodeDerSequence(concatBytes(concatBytes(rDer, sDer), trailingDer))
+        let request = Es256P256StructuredVerifyRequest(
+            xBytes,
+            yBytes,
+            "structured verify payload".toArray(),
+            derSignature
+        )
+        let outcome = tryEs256P256VerifyStructuredRequest(request)
+        assertStructuredVerifyFailureCode(outcome, "PARSE_ERROR")
+    }
+
+    @TestCase
+    public func testStructuredVerifyRejectsNonMinimalDerInteger(): Unit {
+        let xBytes = BigNum.fromHex(P256_GX_HEX).toBytesBE(paddedLen: 32)
+        let yBytes = BigNum.fromHex(P256_GY_HEX).toBytesBE(paddedLen: 32)
+        let derSignature = encodeDerSignatureFromIntegerContents(
+            [UInt8(0x00), UInt8(0x01)],
+            [UInt8(0x01)]
+        )
+        let request = Es256P256StructuredVerifyRequest(
+            xBytes,
+            yBytes,
+            "structured verify payload".toArray(),
+            derSignature
+        )
+        let outcome = tryEs256P256VerifyStructuredRequest(request)
+        assertStructuredVerifyFailureCode(outcome, "PARSE_ERROR")
+    }
+
+    @TestCase
+    public func testStructuredVerifyRejectsOversizedScalarInteger(): Unit {
+        let xBytes = BigNum.fromHex(P256_GX_HEX).toBytesBE(paddedLen: 32)
+        let yBytes = BigNum.fromHex(P256_GY_HEX).toBytesBE(paddedLen: 32)
+        let oversizedR = Array<Byte>(33, repeat: UInt8(0x01))
+        let derSignature = encodeDerSignatureFromIntegerContents(oversizedR, [UInt8(0x01)])
+        let request = Es256P256StructuredVerifyRequest(
+            xBytes,
+            yBytes,
+            "structured verify payload".toArray(),
+            derSignature
+        )
+        let outcome = tryEs256P256VerifyStructuredRequest(request)
+        assertStructuredVerifyFailureCode(outcome, "PARSE_ERROR")
+    }
 }
 
 private func assertEcdsaSignVerify(curve: NamedCurve, scalar: BigNum, digestHex: String): Unit {
@@ -153,23 +253,54 @@ private func assertEcdsaSignVerify(curve: NamedCurve, scalar: BigNum, digestHex:
 private func encodeDerSignature(r: BigNum, s: BigNum): Array<Byte> {
     let rBytes = stripLeadingZero(r.toBytesBE(paddedLen: 32))
     let sBytes = stripLeadingZero(s.toBytesBE(paddedLen: 32))
-    let rDer = encodeDerInteger(rBytes)
-    let sDer = encodeDerInteger(sBytes)
-    let seqContent = Array<Byte>(rDer.size + sDer.size, repeat: 0)
+    encodeDerSignatureFromIntegerContents(rBytes, sBytes)
+}
+
+private func encodeDerSignatureFromIntegerContents(
+    rContent: Array<Byte>,
+    sContent: Array<Byte>
+): Array<Byte> {
+    let rDer = encodeDerInteger(rContent)
+    let sDer = encodeDerInteger(sContent)
+    encodeDerSequence(concatBytes(rDer, sDer))
+}
+
+private func concatBytes(left: Array<Byte>, right: Array<Byte>): Array<Byte> {
+    let out = Array<Byte>(left.size + right.size, repeat: 0)
     var pos = 0
     var i = 0
-    while (i < rDer.size) {
-        seqContent[pos] = rDer[i]
+    while (i < left.size) {
+        out[pos] = left[i]
         pos += 1
         i += 1
     }
     i = 0
-    while (i < sDer.size) {
-        seqContent[pos] = sDer[i]
+    while (i < right.size) {
+        out[pos] = right[i]
         pos += 1
         i += 1
     }
-    encodeDerSequence(seqContent)
+    out
+}
+
+private func requireStructuredVerifyResult(
+    outcome: Es256P256StructuredVerifyOutcome
+): Es256P256StructuredVerifyResult {
+    match (outcome.result) {
+        case Some(result) => result
+        case None => throw Exception("expected structured verify result")
+    }
+}
+
+private func assertStructuredVerifyFailureCode(
+    outcome: Es256P256StructuredVerifyOutcome,
+    expectedCode: String
+): Unit {
+    @Assert(outcome.ok, false)
+    match (outcome.code) {
+        case Some(code) => @Assert(code.toString(), expectedCode)
+        case None => @Fail("expected structured verify error code")
+    }
 }
 
 private func encodeDerInteger(content: Array<Byte>): Array<Byte> {
