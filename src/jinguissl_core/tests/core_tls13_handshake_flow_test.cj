@@ -602,6 +602,14 @@ public class Tls13HandshakeFlowTestSuite {
         )
         @Assert(bytesToHexLower(km1) != bytesToHexLower(km3), true)
 
+        let kmDifferentLabel = tls13ExportKeyingMaterial(
+            exporterMaster,
+            "EXPORTER-jinguissl-ssh",
+            context: "ctx-a".toArray(),
+            outputLen: 32
+        )
+        @Assert(bytesToHexLower(km1) != bytesToHexLower(kmDifferentLabel), true)
+
         let kmLong = tls13ExportKeyingMaterial(
             exporterMaster,
             "EXPORTER-jinguissl-http",
@@ -615,6 +623,13 @@ public class Tls13HandshakeFlowTestSuite {
             @Fail("empty TLS1.3 exporter label should be rejected")
         } catch (e: CryptoException) {
             @Assert(e.code.toString(), "INVALID_ARGUMENT")
+        }
+
+        try {
+            _ = tls13ExportKeyingMaterial(exporterMaster, "EXPORTER-jinguissl-http", outputLen: 8161)
+            @Fail("TLS1.3 exporter output beyond HKDF-SHA256 block limit should be rejected")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "OUT_OF_BOUNDS")
         }
     }
 
