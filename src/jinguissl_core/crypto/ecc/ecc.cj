@@ -539,6 +539,9 @@ private func jacobianDouble(p: JacobianPoint, params: CurveParams): JacobianPoin
     JacobianPoint(x3, y3, z3)
 }
 
+// These Jacobian formulas are incomplete formulas with infinity and exceptional
+// point branches. They reduce affine inverse exposure for production consumers,
+// but they are not a constant-time ECC backend by themselves.
 private func jacobianAdd(p: JacobianPoint, q: JacobianPoint, params: CurveParams): JacobianPoint {
     if (p.infinity) {
         return q
@@ -601,8 +604,9 @@ private func scalarMulProjectivePoint(
 
     var bitIndex = Int64(0)
     // Fixed-round candidate selection removes the per-bit add branch from the
-    // production ECC path. BigNum/BigInt arithmetic and allocation timing remain
-    // outside this packet's proof boundary.
+    // production ECC path. The incomplete Jacobian add/double formulas still
+    // branch on infinity and exceptional point relations, and BigNum/BigInt
+    // arithmetic/allocation timing remains outside this packet's proof boundary.
     while (bitIndex < orderBits) {
         let bit = (k >> bitIndex) & one
         let candidate = jacobianAdd(result, addend, params)
