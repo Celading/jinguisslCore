@@ -429,29 +429,6 @@ private func pointDouble(p: AffinePoint, params: CurveParams): AffinePoint {
     AffinePoint(x3, y3)
 }
 
-private func scalarMul(point: AffinePoint, scalar: BigNum, params: CurveParams): AffinePoint {
-    if (point.infinity || scalar.isZero()) {
-        return AffinePoint.infinityPoint()
-    }
-
-    let orderBits = bitLength(params.n)
-    let k = scalar.toBigInt()
-    let zero = BigInt(0)
-    let one = BigInt(1)
-    var result = AffinePoint.infinityPoint()
-    var addend = point
-    var bitIndex = Int64(0)
-
-    while (bitIndex < orderBits) {
-        if (((k >> bitIndex) & one) != zero) {
-            result = pointAdd(result, addend, params)
-        }
-        addend = pointDouble(addend, params)
-        bitIndex += 1
-    }
-    result
-}
-
 private func modNormalize(value: BigNum, modulus: BigNum): BigNum {
     value.mod(modulus)
 }
@@ -618,19 +595,41 @@ private func scalarMulProjectivePoint(
 
     let orderBits = bitLength(params.n)
     let k = scalar.toBigInt()
-    let zero = BigInt(0)
     let one = BigInt(1)
     var result = JacobianPoint.infinityPoint()
     var addend = affineToJacobian(point)
 
     var bitIndex = Int64(0)
+    // Fixed-round candidate selection removes the per-bit add branch from the
+    // production ECC path. BigNum/BigInt arithmetic and allocation timing remain
+    // outside this packet's proof boundary.
     while (bitIndex < orderBits) {
-        if (((k >> bitIndex) & one) != zero) {
-            result = jacobianAdd(result, addend, params)
-        }
+        let bit = (k >> bitIndex) & one
+        let candidate = jacobianAdd(result, addend, params)
+        result = selectJacobianPoint(bit, candidate, result, params)
         addend = jacobianDouble(addend, params)
         bitIndex += 1
     }
 
     jacobianToAffine(result, params)
+}
+
+private func selectJacobianPoint(
+    bit: BigInt,
+    ifOne: JacobianPoint,
+    ifZero: JacobianPoint,
+    params: CurveParams
+): JacobianPoint {
+    let x = selectFieldElement(bit, ifOne.x, ifZero.x, params.p)
+    let y = selectFieldElement(bit, ifOne.y, ifZero.y, params.p)
+    let z = selectFieldElement(bit, ifOne.z, ifZero.z, params.p)
+    if (z.isZero()) {
+        return JacobianPoint.infinityPoint()
+    }
+    JacobianPoint(x, y, z)
+}
+
+private func selectFieldElement(bit: BigInt, ifOne: BigNum, ifZero: BigNum, modulus: BigNum): BigNum {
+    let selected = ifZero.toBigInt() + (bit * (ifOne.toBigInt() - ifZero.toBigInt()))
+    BigNum(selected).mod(modulus)
 }
