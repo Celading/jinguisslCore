@@ -20,8 +20,10 @@ private let P384_GY: BigNum = BigNum.fromHex("3617DE4A96262C6F5D9E98BF9292DC29F8
 private let TLS13_KEY_SHARE_EXTENSION_TYPE: Int64 = 0x0033
 private let TLS13_SUPPORTED_GROUPS_EXTENSION_TYPE: Int64 = 0x000a
 private let TLS13_SUPPORTED_VERSIONS_EXTENSION_TYPE: Int64 = 0x002b
+private let TLS13_CIPHER_SUITE_AES_256_GCM_SHA384_TEST: Int64 = 0x1302
 private let TLS13_GROUP_SECP256R1_TEST: Int64 = 0x0017
 private let TLS13_GROUP_X25519_TEST: Int64 = 0x001d
+private let TLS13_GROUP_X25519_MLKEM768_TEST: Int64 = 0x11ec
 private let TLS13_VERSION_TEST: Int64 = 0x0304
 
 @Test
@@ -1742,6 +1744,26 @@ public class Tls13HandshakeFlowTestSuite {
     }
 
     @TestCase
+    public func testTls13HttpClientHelloInteropCloudflareOpenSslBaselineGap(): Unit {
+        let x25519Private = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+        let x25519Public = x25519PublicFromPrivate(x25519Private)
+        let x25519Hello = tls13BuildHttpClientHelloX25519(x25519Public, "www.cloudflare.com")
+        let profile = tls13HttpClientHelloInteropProfileCloudflareOpenSsl20260701()
+
+        @Assert(profile.serverName, "www.cloudflare.com")
+        @Assert(profile.alpnProtocols, ["h2", "http/1.1"])
+        @Assert(tls13TestContainsInt64(profile.cipherSuites, TLS13_CIPHER_SUITE_AES_256_GCM_SHA384_TEST), true)
+        @Assert(tls13TestContainsInt64(profile.supportedGroups, TLS13_GROUP_X25519_MLKEM768_TEST), true)
+        @Assert(tls13TestContainsInt64(profile.keyShareGroups, TLS13_GROUP_X25519_MLKEM768_TEST), true)
+
+        let report = tls13PrecheckEncodedClientHelloInterop(x25519Hello, profile)
+        @Assert(report.ready, false)
+        @Assert(tls13TestContainsString(report.missing, "missing cipher_suite 4866"), true)
+        @Assert(tls13TestContainsString(report.missing, "missing key_share_group 4588"), true)
+        @Assert(tls13TestContainsString(report.missing, "missing supported_group 4588"), true)
+    }
+
+    @TestCase
     public func testTls13HttpClientHelloInteropPrecheckReportsMissingFields(): Unit {
         let clientPublic = EcPublicKey(P256, P256_2G_X, P256_2G_Y)
         let ecdheHello = tls13BuildHttpClientHelloEcdhe(
@@ -2610,6 +2632,15 @@ private func bytesToHexLower(bytes: Array<Byte>): String {
 }
 
 private func tls13TestContainsString(values: Array<String>, expected: String): Bool {
+    for (value in values) {
+        if (value == expected) {
+            return true
+        }
+    }
+    false
+}
+
+private func tls13TestContainsInt64(values: Array<Int64>, expected: Int64): Bool {
     for (value in values) {
         if (value == expected) {
             return true

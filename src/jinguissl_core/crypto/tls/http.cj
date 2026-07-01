@@ -11,8 +11,15 @@ public let TLS_HTTP_ALPN_H2: String = "h2"
 public let TLS_HTTP_ALPN_HTTP11: String = "http/1.1"
 
 private let TLS_HTTP_VERSION_TLS13: Int64 = 0x0304
+private let TLS_HTTP_CIPHER_TLS_AES_256_GCM_SHA384: Int64 = 0x1302
 private let TLS_HTTP_GROUP_SECP256R1: Int64 = 0x0017
+private let TLS_HTTP_GROUP_SECP384R1: Int64 = 0x0018
+private let TLS_HTTP_GROUP_SECP521R1: Int64 = 0x0019
 private let TLS_HTTP_GROUP_X25519: Int64 = 0x001d
+private let TLS_HTTP_GROUP_X448: Int64 = 0x001e
+private let TLS_HTTP_GROUP_FFDHE2048: Int64 = 0x0100
+private let TLS_HTTP_GROUP_FFDHE3072: Int64 = 0x0101
+private let TLS_HTTP_GROUP_X25519_MLKEM768: Int64 = 0x11ec
 
 public class TlsHttpNegotiationPolicy {
     public let requireServerName: Bool
@@ -52,6 +59,36 @@ public func tls13HttpClientHelloInteropProfileX25519(
     alpnProtocols!: Array<String> = []
 ): Tls13ClientHelloInteropProfile {
     tls13HttpClientHelloInteropProfileForGroup(serverName, TLS_HTTP_GROUP_X25519, alpnProtocols)
+}
+
+public func tls13HttpClientHelloInteropProfileCloudflareOpenSsl20260701(
+    serverName!: String = "www.cloudflare.com"
+): Tls13ClientHelloInteropProfile {
+    Tls13ClientHelloInteropProfile(
+        serverName: serverName.trimAscii().toAsciiLower(),
+        alpnProtocols: tlsHttpDefaultAlpnPreference(),
+        cipherSuites: [
+            TLS_HTTP_CIPHER_TLS_AES_256_GCM_SHA384,
+            TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+            TLS13_CIPHER_SUITE_AES_128_GCM_SHA256
+        ],
+        supportedVersions: [TLS_HTTP_VERSION_TLS13],
+        supportedGroups: [
+            TLS_HTTP_GROUP_X25519_MLKEM768,
+            TLS_HTTP_GROUP_X25519,
+            TLS_HTTP_GROUP_SECP256R1,
+            TLS_HTTP_GROUP_X448,
+            TLS_HTTP_GROUP_SECP384R1,
+            TLS_HTTP_GROUP_SECP521R1,
+            TLS_HTTP_GROUP_FFDHE2048,
+            TLS_HTTP_GROUP_FFDHE3072
+        ],
+        keyShareGroups: [
+            TLS_HTTP_GROUP_X25519_MLKEM768,
+            TLS_HTTP_GROUP_X25519
+        ],
+        signatureSchemes: tls13HttpClientHelloOpenSslSignatureSchemes()
+    )
 }
 
 public func tls13BuildHttpClientHelloEcdhe(
@@ -378,6 +415,31 @@ private func tls13HttpClientHelloSignatureSchemes(): Array<Int64> {
         TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256,
         TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384,
         TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256
+    ]
+}
+
+private func tls13HttpClientHelloOpenSslSignatureSchemes(): Array<Int64> {
+    [
+        0x0905,
+        0x0906,
+        0x0904,
+        TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256,
+        TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384,
+        0x0603,
+        0x0807,
+        0x0808,
+        0x081a,
+        0x081b,
+        0x081c,
+        0x0809,
+        0x080a,
+        0x080b,
+        TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256,
+        0x0805,
+        0x0806,
+        0x0401,
+        0x0501,
+        0x0601
     ]
 }
 
