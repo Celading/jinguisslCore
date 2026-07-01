@@ -47,6 +47,7 @@ private func assertProjectiveParity(curve: NamedCurve, gx: BigNum, gy: BigNum): 
         BigNum.fromHex("2"),
         BigNum.fromHex("3"),
         BigNum.fromHex("64"),
+        BigNum.fromHex("80000000000000000000000000000000"),
         orderMinusOne(curve)
     ]
 

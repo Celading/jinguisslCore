@@ -11,7 +11,8 @@ import os
 import re
 import sys
 
-SOURCE_DIR = "/Users/cinyu/Documents/Work0/CureateX/Cangku/JinguiSSL-core/src/jinguissl_core"
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+SOURCE_DIR = os.path.join(ROOT_DIR, "src", "jinguissl_core")
 
 # Match public func declaration WITH its opening brace
 FUNC_PATTERN = re.compile(

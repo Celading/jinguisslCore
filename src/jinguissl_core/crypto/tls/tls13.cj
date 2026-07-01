@@ -3,7 +3,7 @@ package jinguissl_core.crypto.tls
 import std.collection.ArrayList
 import jinguissl_core.crypto.aes.{AesEngineKind}
 import jinguissl_core.crypto.bignum.BigNum
-import jinguissl_core.crypto.compliance.{FipsProfile, TLS_VERSION_1_2, TlsVersion}
+import jinguissl_core.crypto.compliance.{FipsProfile}
 import jinguissl_core.crypto.digest.{hmac, sha256, sha384, HashAlgorithm}
 import jinguissl_core.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecdhDeriveSharedSecret, ecdsaSign, ecdsaVerify, requireFipsCurve}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
@@ -622,152 +622,6 @@ private let TLS13_CIPHER_TLS_CHACHA20_POLY1305_SHA256: Int64 = TLS13_CIPHER_SUIT
 private let TLS13_CERT_VERIFY_PREFIX_LEN: Int64 = 64
 private let TLS13_CERT_VERIFY_CONTEXT_SERVER: String = "TLS 1.3, server CertificateVerify"
 private let TLS13_CERT_VERIFY_CONTEXT_CLIENT: String = "TLS 1.3, client CertificateVerify"
-
-public class Tls13ClientHelloInteropSummary {
-    public let legacyVersion: TlsVersion
-    public let cipherSuites: Array<Int64>
-    public let extensionTypes: Array<Int64>
-    public let serverNames: Array<String>
-    public let alpnProtocols: Array<String>
-    public let supportedVersions: Array<Int64>
-    public let supportedGroups: Array<Int64>
-    public let keyShareGroups: Array<Int64>
-    public let signatureSchemes: Array<Int64>
-
-    public init(
-        legacyVersion: TlsVersion,
-        cipherSuites: Array<Int64>,
-        extensionTypes: Array<Int64>,
-        serverNames: Array<String>,
-        alpnProtocols: Array<String>,
-        supportedVersions: Array<Int64>,
-        supportedGroups: Array<Int64>,
-        keyShareGroups: Array<Int64>,
-        signatureSchemes: Array<Int64>
-    ) {
-        this.legacyVersion = legacyVersion
-        this.cipherSuites = cipherSuites.clone()
-        this.extensionTypes = extensionTypes.clone()
-        this.serverNames = serverNames.clone()
-        this.alpnProtocols = alpnProtocols.clone()
-        this.supportedVersions = supportedVersions.clone()
-        this.supportedGroups = supportedGroups.clone()
-        this.keyShareGroups = keyShareGroups.clone()
-        this.signatureSchemes = signatureSchemes.clone()
-    }
-}
-
-public class Tls13ClientHelloInteropProfile {
-    public let serverName: String
-    public let alpnProtocols: Array<String>
-    public let cipherSuites: Array<Int64>
-    public let supportedVersions: Array<Int64>
-    public let supportedGroups: Array<Int64>
-    public let keyShareGroups: Array<Int64>
-    public let signatureSchemes: Array<Int64>
-
-    public init(
-        serverName!: String = "",
-        alpnProtocols!: Array<String> = [],
-        cipherSuites!: Array<Int64> = [],
-        supportedVersions!: Array<Int64> = [TLS13_VERSION],
-        supportedGroups!: Array<Int64> = [],
-        keyShareGroups!: Array<Int64> = [],
-        signatureSchemes!: Array<Int64> = []
-    ) {
-        this.serverName = serverName
-        this.alpnProtocols = alpnProtocols.clone()
-        this.cipherSuites = cipherSuites.clone()
-        this.supportedVersions = supportedVersions.clone()
-        this.supportedGroups = supportedGroups.clone()
-        this.keyShareGroups = keyShareGroups.clone()
-        this.signatureSchemes = signatureSchemes.clone()
-    }
-}
-
-public class Tls13ClientHelloInteropPrecheckReport {
-    public let ready: Bool
-    public let missing: Array<String>
-    public let warnings: Array<String>
-
-    public init(ready: Bool, missing: Array<String>, warnings: Array<String>) {
-        this.ready = ready
-        this.missing = missing.clone()
-        this.warnings = warnings.clone()
-    }
-}
-
-/**
- * tls13SummarizeClientHello.
- *
- * @throws CryptoException 当操作失败时抛出
- */
-public func tls13SummarizeClientHello(encodedClientHello: Array<Byte>): Tls13ClientHelloInteropSummary {
-    tls13SummarizeDecodedClientHello(tlsDecodeClientHelloHandshake(encodedClientHello))
-}
-
-/**
- * tls13SummarizeDecodedClientHello.
- *
- * @throws CryptoException 当操作失败时抛出
- */
-public func tls13SummarizeDecodedClientHello(clientHello: TlsClientHello): Tls13ClientHelloInteropSummary {
-    let extensionTypes = ArrayList<Int64>()
-    for (ext in clientHello.extensions) {
-        extensionTypes.add(ext.extType)
-    }
-
-    Tls13ClientHelloInteropSummary(
-        clientHello.legacyVersion,
-        clientHello.cipherSuites,
-        extensionTypes.toArray(),
-        tls13SummarizeServerNames(clientHello.extensions),
-        tls13SummarizeAlpnProtocols(clientHello.extensions),
-        tls13SummarizeSupportedVersions(clientHello.extensions),
-        tls13SummarizeSupportedGroups(clientHello.extensions),
-        tls13SummarizeKeyShareGroups(clientHello.extensions),
-        tls13SummarizeSignatureSchemes(clientHello.extensions)
-    )
-}
-
-/**
- * tls13PrecheckEncodedClientHelloInterop.
- *
- * @throws CryptoException 当操作失败时抛出
- */
-public func tls13PrecheckEncodedClientHelloInterop(
-    encodedClientHello: Array<Byte>,
-    profile: Tls13ClientHelloInteropProfile
-): Tls13ClientHelloInteropPrecheckReport {
-    tls13PrecheckClientHelloInterop(tls13SummarizeClientHello(encodedClientHello), profile)
-}
-
-/**
- * tls13PrecheckClientHelloInterop.
- */
-public func tls13PrecheckClientHelloInterop(
-    summary: Tls13ClientHelloInteropSummary,
-    profile: Tls13ClientHelloInteropProfile
-): Tls13ClientHelloInteropPrecheckReport {
-    let missing = ArrayList<String>()
-    let warnings = ArrayList<String>()
-
-    if (summary.legacyVersion != TLS_VERSION_1_2) {
-        warnings.add("legacy_version expected TLS1.2 compatibility value, got ${summary.legacyVersion.toString()}")
-    }
-    if (profile.serverName.size > 0 && !tls13ContainsString(summary.serverNames, profile.serverName)) {
-        missing.add("missing SNI ${profile.serverName}")
-    }
-
-    tls13RequireAllStrings(missing, summary.alpnProtocols, profile.alpnProtocols, "ALPN")
-    tls13RequireAllInt64(missing, summary.cipherSuites, profile.cipherSuites, "cipher_suite")
-    tls13RequireAllInt64(missing, summary.supportedVersions, profile.supportedVersions, "supported_version")
-    tls13RequireAllInt64(missing, summary.supportedGroups, profile.supportedGroups, "supported_group")
-    tls13RequireAllInt64(missing, summary.keyShareGroups, profile.keyShareGroups, "key_share_group")
-    tls13RequireAllInt64(missing, summary.signatureSchemes, profile.signatureSchemes, "signature_scheme")
-
-    Tls13ClientHelloInteropPrecheckReport(missing.size == 0, missing.toArray(), warnings.toArray())
-}
 
 public func tls13HandshakeRequireAllowed(
     profile: FipsProfile,
@@ -3426,48 +3280,6 @@ private func tls13FindOptionalExtension(extensions: Array<TlsExtension>, extType
     None
 }
 
-private func tls13SummarizeServerNames(extensions: Array<TlsExtension>): Array<String> {
-    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS_EXT_SERVER_NAME)) {
-        return tlsParseServerNameExtension(ext)
-    }
-    []
-}
-
-private func tls13SummarizeAlpnProtocols(extensions: Array<TlsExtension>): Array<String> {
-    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS_EXT_ALPN)) {
-        return tlsParseAlpnExtension(ext)
-    }
-    []
-}
-
-private func tls13SummarizeSupportedVersions(extensions: Array<TlsExtension>): Array<Int64> {
-    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_SUPPORTED_VERSIONS)) {
-        return tls13ParseClientSupportedVersionsExtension(ext)
-    }
-    []
-}
-
-private func tls13SummarizeSupportedGroups(extensions: Array<TlsExtension>): Array<Int64> {
-    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_SUPPORTED_GROUPS)) {
-        return tls13ParseSupportedGroupsExtension(ext)
-    }
-    []
-}
-
-private func tls13SummarizeKeyShareGroups(extensions: Array<TlsExtension>): Array<Int64> {
-    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_KEY_SHARE)) {
-        return tls13ParseClientKeyShareGroupIds(ext)
-    }
-    []
-}
-
-private func tls13SummarizeSignatureSchemes(extensions: Array<TlsExtension>): Array<Int64> {
-    if (let Some(ext) <- tls13FindOptionalExtension(extensions, TLS13_EXT_SIGNATURE_ALGORITHMS)) {
-        return tls13ParseSignatureAlgorithmsExtension(ext)
-    }
-    []
-}
-
 private func tls13RequireExtension(extensions: Array<TlsExtension>, extType: Int64, label: String): TlsExtension {
     for (ext in extensions) {
         if (ext.extType == extType) {
@@ -3734,32 +3546,6 @@ private func tls13ContainsInt64(values: Array<Int64>, target: Int64): Bool {
         }
     }
     false
-}
-
-private func tls13RequireAllInt64(
-    missing: ArrayList<String>,
-    actual: Array<Int64>,
-    expected: Array<Int64>,
-    label: String
-): Unit {
-    for (value in expected) {
-        if (!tls13ContainsInt64(actual, value)) {
-            missing.add("missing ${label} ${value}")
-        }
-    }
-}
-
-private func tls13RequireAllStrings(
-    missing: ArrayList<String>,
-    actual: Array<String>,
-    expected: Array<String>,
-    label: String
-): Unit {
-    for (value in expected) {
-        if (!tls13ContainsString(actual, value)) {
-            missing.add("missing ${label} ${value}")
-        }
-    }
 }
 
 private func tls13ContainsDistinguishedName(values: Array<Array<Byte>>, target: Array<Byte>): Bool {
