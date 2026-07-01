@@ -34,6 +34,16 @@
 - 协议能力：`TLS 1.2`、`TLS 1.3`、`SSH transport / handshake`
 - 工具与性能：大数兼容层、性能基准、测试向量与协议流测试
 
+### TLS 1.3 当前边界
+
+`crypto/tls` 当前覆盖的 TLS 1.3 cipher suite 包括：
+
+- `TLS_AES_128_GCM_SHA256`
+- `TLS_AES_256_GCM_SHA384`
+- `TLS_CHACHA20_POLY1305_SHA256`
+
+HTTP X25519 ClientHello 会优先携带 `TLS_AES_256_GCM_SHA384`。当前不声明 `X25519MLKEM768` key share 支持，也不把本地握手/record 测试等同于浏览器、OpenSSL 或 curl 线上互通成功。
+
 ### 关于 RC4
 
 `RC4` 不属于当前适配主线。JinguiSSL-core 当前聚焦现代密码与协议能力，例如 `AES`、`ChaCha20-Poly1305`、`ECC`、`X25519`、`X.509`、`TLS 1.2/1.3` 与 `SSH`。
