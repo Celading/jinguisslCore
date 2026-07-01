@@ -5,7 +5,7 @@ import jinguissl_core.crypto.compliance.FipsProfile
 import jinguissl_core.crypto.digest.{hmac, HashAlgorithm}
 import jinguissl_core.crypto.ecc.{NamedCurve, EcPrivateKey, EcPublicKey, ecdhDeriveSharedSecret}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
-import jinguissl_core.crypto.rsa.{RsaPrivateKey, RsaPublicKey}
+import jinguissl_core.crypto.rsa.{RsaPrivateKey, RsaPublicKey, rsaPrivateTransformRawForProtocol}
 import jinguissl_core.crypto.utils.{randomSeed, secureCopyInto}
 
 public func rsaKemRequireAllowed(profile: FipsProfile): Unit {
@@ -59,7 +59,10 @@ public func rsaKemDecapsulate(
         throw CryptoException(InvalidArgument, "RSA-KEM ciphertext representative out of range")
     }
 
-    let ikm = c.modExp(privateKey.privateExponent, modulus).toBytesBE(paddedLen: k)
+    // Keep RSA-KEM decapsulation on the same blinding/fail-closed private
+    // transform as RSA signature and TLS protocol internals. This does not
+    // certify BigNum/BigInt timing, but avoids a direct privateExponent path.
+    let ikm = rsaPrivateTransformRawForProtocol(privateKey, ciphertext)
     hkdfSha256(ikm, appendContext("RSA-KEM", info), sharedSecretLen)
 }
 
