@@ -1,29 +1,44 @@
-# JinguiSSL-core CI
-#
-# Haomo 工程流 — 每次提交自动构建 + 测试
-
-name: CI
+name: JinguiSSL CI Security Audit
 
 on:
   push:
-    branches: [main, master, develop]
+    branches:
+      - main
+      - master
+      - develop
+      - "mr/**"
   pull_request:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+  workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
+permissions:
+  contents: read
 
 jobs:
-  build:
-    name: Build & Test
+  public-safety-audit:
+    name: Fork-safe public audit
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static public-surface audit
+        run: bash scripts/jinguissl_ci_audit.sh public .
 
+  trusted-build-test:
+    name: Trusted build and test
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: public-safety-audit
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Cangku toolchain (cjc + cjpm)
+      - name: Hosted dependency graph audit
+        run: bash scripts/jinguissl_ci_audit.sh hosted-graph .
+
+      - name: Install Cangku toolchain
         run: |
-          curl -sSf https://cangku-lang.github.io/install.sh | bash -s -- -y
+          curl -fsSL https://cangku-lang.github.io/install.sh | bash -s -- -y
           echo "$HOME/.cangku/bin" >> "$GITHUB_PATH"
 
       - name: Cache Cangku packages
@@ -36,8 +51,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cangku-
 
+      - name: Verify Cangjie toolchain
+        run: |
+          command -v cjc
+          command -v cjpm
+          cjc --version
+          cjpm --version
+
       - name: Build
         run: cjpm build
 
-      - name: Run tests
+      - name: Test
         run: cjpm test
