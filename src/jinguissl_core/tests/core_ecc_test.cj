@@ -127,6 +127,14 @@ public class CoreEccTestSuite {
     }
 
     @TestCase
+    public func testEccProjectiveProductionConsumersAcrossCurves(): Unit {
+        assertProjectiveProductionConsumers(P256)
+        assertProjectiveProductionConsumers(P384)
+        assertProjectiveProductionConsumers(P521)
+        assertProjectiveProductionConsumers(SECP256K1)
+    }
+
+    @TestCase
     public func testStructuredVerifyInvalidDer(): Unit {
         let xBytes = BigNum.fromHex(P256_GX_HEX).toBytesBE(paddedLen: 32)
         let yBytes = BigNum.fromHex(P256_GY_HEX).toBytesBE(paddedLen: 32)
@@ -248,6 +256,27 @@ private func assertEcdsaSignVerify(curve: NamedCurve, scalar: BigNum, digestHex:
     let (r, s) = ecdsaSign(privateKey, digest)
     @Assert(ecdsaVerify(publicKey, digest, r, s), true)
     @Assert(ecdsaVerify(publicKey, digest, r.add(BigNum.one()), s), false)
+}
+
+private func assertProjectiveProductionConsumers(curve: NamedCurve): Unit {
+    let privateKey = EcPrivateKey(curve, BigNum.one())
+    let publicKey = ecPublicFromPrivateKey(privateKey)
+    let shared = ecdhDeriveSharedSecret(privateKey, publicKey)
+    @Assert(shared, publicKey.x.toBytesBE(paddedLen: curveFieldByteLength(curve)))
+
+    let digest = hexToBytes(TEST_HEX_32_00112233445566778899AABBCCDDEEFF_00112233445566778899AABBCCDDEEFF)
+    let (r, s) = ecdsaSign(privateKey, digest)
+    @Assert(ecdsaVerify(publicKey, digest, r, s), true)
+    @Assert(ecdsaVerify(publicKey, digest, r.add(BigNum.one()), s), false)
+}
+
+private func curveFieldByteLength(curve: NamedCurve): Int64 {
+    match (curve) {
+        case P256 => 32
+        case P384 => 48
+        case P521 => 66
+        case SECP256K1 => 32
+    }
 }
 
 private func encodeDerSignature(r: BigNum, s: BigNum): Array<Byte> {
