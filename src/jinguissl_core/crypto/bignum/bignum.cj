@@ -4,6 +4,13 @@ import std.math.numeric.{BigInt, abs}
 import std.collection.ArrayList
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
 
+/**
+ * BigNum is a stable wrapper over the stdlib BigInt backend.
+ *
+ * This wrapper keeps arithmetic behavior and error mapping under JinguiSSL
+ * control, but it does not certify constant-time limb arithmetic, allocation,
+ * or BigInt exponent/inverse internals.
+ */
 public class BigNum <: Equatable<BigNum> & ToString {
     let _value: BigInt
     public let sign: Int64
@@ -202,8 +209,8 @@ public func modExp(exponent: BigNum, modulus: BigNum): BigNum {
             throw CryptoException(InvalidArgument, "negative exponent is not supported")
         }
 
-        // Phase-1: odd modulus path is only a modPow wrapper; keep the
-        // wording honest until a real Montgomery implementation exists.
+        // Phase-1: odd modulus path is only a modPow wrapper. Do not use this
+        // as a constant-time private exponentiation claim.
         let result = if (isOdd(m)) {
             oddModulusModPowPhase1(_value, exponent._value, m)
         } else {
@@ -222,6 +229,7 @@ public func modInverse(modulus: BigNum): BigNum {
         if (m.sign == 0) {
             throw CryptoException(DivideByZero, "modulus must not be zero")
         }
+        // stdlib BigInt owns the inverse algorithm and timing shape here.
         try {
             let inv = _value.modInverse(m)
             return BigNum(normalizeMod(inv, m))

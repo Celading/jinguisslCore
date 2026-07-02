@@ -3,7 +3,7 @@ package jinguissl_core.tests
 import std.fs.*
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.compliance.FipsProfile
-import jinguissl_core.crypto.digest.bytesToHexLower
+import jinguissl_core.crypto.digest.{bytesToHexLower, hmac, HashAlgorithm}
 import jinguissl_core.crypto.ecc.*
 import jinguissl_core.crypto.error.CryptoException
 import jinguissl_core.crypto.kem.*
@@ -11,6 +11,7 @@ import jinguissl_core.crypto.rsa.*
 
 private let P256_GX: BigNum = BigNum.fromHex("6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296")
 private let P256_GY: BigNum = BigNum.fromHex("4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5")
+private let TEST_HKDF_SHA256_LEN: Int64 = 32
 
 @Test
 public class KemTestSuite {
@@ -33,6 +34,23 @@ public class KemTestSuite {
         @Assert(ciphertext.size, 256)
         @Assert(secretEnc.size, 48)
         @Assert(secretEnc, secretDec)
+    }
+
+    @TestCase
+    public func testRsaKemDecapsulationMatchesRawPrivateTransformBoundary(): Unit {
+        let privateKey = loadRsa2048PrivateKey()
+        let k = privateKey.publicKey.modulus.toBytesBE().size
+        let representative = BigNum.fromHex("02")
+        let ciphertext = representative
+            .modExp(privateKey.publicKey.exponent, privateKey.publicKey.modulus)
+            .toBytesBE(paddedLen: k)
+        let info = "rsa-kem-raw-transform-boundary".toArray()
+
+        let ikm = rsaPrivateTransformRawForProtocol(privateKey, ciphertext)
+        let expectedSecret = testHkdfSha256(ikm, testAppendContext("RSA-KEM", info), 40)
+        let actualSecret = rsaKemDecapsulate(privateKey, ciphertext, sharedSecretLen: 40, info: info)
+
+        @Assert(actualSecret, expectedSecret)
     }
 
     @TestCase
@@ -168,6 +186,66 @@ public class KemTestSuite {
             @Assert(e.code.toString(), "COMPLIANCE_REJECTED")
         }
     }
+}
+
+private func testAppendContext(label: String, info: Array<Byte>): Array<Byte> {
+    let labelBytes = label.toArray()
+    let out = Array<Byte>(labelBytes.size + info.size, repeat: 0)
+    var i = 0
+    while (i < labelBytes.size) {
+        out[i] = labelBytes[i]
+        i += 1
+    }
+    var j = 0
+    while (j < info.size) {
+        out[labelBytes.size + j] = info[j]
+        j += 1
+    }
+    out
+}
+
+private func testHkdfSha256(ikm: Array<Byte>, info: Array<Byte>, outputLen: Int64): Array<Byte> {
+    let zeroSalt = Array<Byte>(TEST_HKDF_SHA256_LEN, repeat: 0)
+    let prk = hmac(HashAlgorithm.SHA256, zeroSalt, ikm)
+    let blocks = (outputLen + TEST_HKDF_SHA256_LEN - 1) / TEST_HKDF_SHA256_LEN
+    let out = Array<Byte>(outputLen, repeat: 0)
+    var t = Array<Byte>(0, repeat: 0)
+    var offset: Int64 = 0
+    var counter: Int64 = 1
+
+    while (counter <= blocks) {
+        let input = Array<Byte>(t.size + info.size + 1, repeat: 0)
+        var i = 0
+        while (i < t.size) {
+            input[i] = t[i]
+            i += 1
+        }
+        var j = 0
+        while (j < info.size) {
+            input[t.size + j] = info[j]
+            j += 1
+        }
+        input[input.size - 1] = UInt8(counter)
+
+        t = hmac(HashAlgorithm.SHA256, prk, input)
+
+        let remain = outputLen - offset
+        let take = if (remain < TEST_HKDF_SHA256_LEN) {
+            remain
+        } else {
+            TEST_HKDF_SHA256_LEN
+        }
+        var k = 0
+        while (k < take) {
+            out[offset + k] = t[k]
+            k += 1
+        }
+
+        offset += take
+        counter += 1
+    }
+
+    out
 }
 
 private func loadRsa2048PrivateKey(): RsaPrivateKey {
