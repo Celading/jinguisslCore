@@ -5,9 +5,9 @@ import jinguissl_core.crypto.aes.{AesEngineKind}
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.compliance.{FipsProfile}
 import jinguissl_core.crypto.digest.{hmac, sha256, sha384, HashAlgorithm}
-import jinguissl_core.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecdhDeriveSharedSecret, ecdsaSign, ecdsaVerify, requireFipsCurve}
+import jinguissl_core.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecdhDeriveSharedSecret, requireFipsCurve}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
-import jinguissl_core.crypto.rsa.{RsaHashAlgorithm, RsaPrivateKey, rsaSignPssWithHash, rsaVerifyPssWithHash}
+import jinguissl_core.crypto.rsa.RsaPrivateKey
 import jinguissl_core.crypto.utils.{constantTimeEquals, randomSeed, secureCopyInto}
 import jinguissl_core.crypto.x25519.{X25519_KEY_LEN, x25519DeriveSharedSecret, x25519ValidatePublicKey}
 import jinguissl_core.crypto.x509.{X509Certificate, X509VerificationPolicy, X509VerificationResult, x509ExtractEcPublicKey, x509ExtractRsaPublicKey, x509ParseDer, x509VerifyCertificateChain, x509VerifyCertificateChainWithProfile}
@@ -486,9 +486,7 @@ public class Tls13ServerHandshakeFlight {
         if (serverHello.size == 0 || encryptedExtensions.size == 0) {
             throw CryptoException(InvalidArgument, "TLS1.3 server handshake flight messages must not be empty")
         }
-        if (transcriptHash.size != 32) {
-            throw CryptoException(InvalidArgument, "TLS1.3 transcript hash must be SHA-256 sized")
-        }
+        _ = tls13HashAlgorithmForHashLen(transcriptHash.size)
         let normalizedAlpn = selectedAlpn.trimAscii()
         let normalizedSni = requestedServerName.trimAscii().toAsciiLower()
         this.serverHello = serverHello.clone()
@@ -592,7 +590,9 @@ public class Tls13CertificateRequestParameters {
 
 public let TLS13_DEFAULT_AEAD_KEY_LEN: Int64 = 16
 public let TLS13_DEFAULT_AEAD_IV_LEN: Int64 = 12
-public let TLS13_HASH_LEN: Int64 = 32
+public let TLS13_SHA256_HASH_LEN: Int64 = 32
+public let TLS13_SHA384_HASH_LEN: Int64 = 48
+public let TLS13_HASH_LEN: Int64 = TLS13_SHA256_HASH_LEN
 public let TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256: Int64 = 0x0403
 public let TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384: Int64 = 0x0503
 public let TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256: Int64 = 0x0804
@@ -602,6 +602,7 @@ public let TLS13_KEY_UPDATE_NOT_REQUESTED: Int64 = 0
 public let TLS13_KEY_UPDATE_REQUESTED: Int64 = 1
 public let TLS13_MAX_TICKET_LIFETIME_SECONDS: Int64 = 0xffff_ffff
 public let TLS13_CIPHER_SUITE_AES_128_GCM_SHA256: Int64 = 0x1301
+public let TLS13_CIPHER_SUITE_AES_256_GCM_SHA384: Int64 = 0x1302
 public let TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256: Int64 = 0x1303
 
 private let TLS13_VERSION: Int64 = 0x0304
@@ -618,10 +619,8 @@ private let TLS13_ECC_POINT_UNCOMPRESSED: Int64 = 0x04
 private let TLS13_P256_FIELD_BYTES: Int64 = 32
 private let TLS13_P384_FIELD_BYTES: Int64 = 48
 private let TLS13_CIPHER_TLS_AES_128_GCM_SHA256: Int64 = TLS13_CIPHER_SUITE_AES_128_GCM_SHA256
+private let TLS13_CIPHER_TLS_AES_256_GCM_SHA384: Int64 = TLS13_CIPHER_SUITE_AES_256_GCM_SHA384
 private let TLS13_CIPHER_TLS_CHACHA20_POLY1305_SHA256: Int64 = TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256
-private let TLS13_CERT_VERIFY_PREFIX_LEN: Int64 = 64
-private let TLS13_CERT_VERIFY_CONTEXT_SERVER: String = "TLS 1.3, server CertificateVerify"
-private let TLS13_CERT_VERIFY_CONTEXT_CLIENT: String = "TLS 1.3, client CertificateVerify"
 
 public func tls13HandshakeRequireAllowed(
     profile: FipsProfile,
@@ -647,7 +646,10 @@ public func tls13HandshakeRequireAllowed(
  * @throws CryptoException 当操作失败时抛出
  */
 public func tls13CipherSuiteAeadAlgorithm(cipherSuite: Int64): TlsAeadAlgorithm {
-    if (cipherSuite == TLS13_CIPHER_SUITE_AES_128_GCM_SHA256) {
+    if (
+        cipherSuite == TLS13_CIPHER_SUITE_AES_128_GCM_SHA256 ||
+        cipherSuite == TLS13_CIPHER_SUITE_AES_256_GCM_SHA384
+    ) {
         return AES_GCM
     }
     if (cipherSuite == TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256) {
@@ -665,10 +667,40 @@ public func tls13CipherSuiteKeyLen(cipherSuite: Int64): Int64 {
     if (cipherSuite == TLS13_CIPHER_SUITE_AES_128_GCM_SHA256) {
         return 16
     }
+    if (cipherSuite == TLS13_CIPHER_SUITE_AES_256_GCM_SHA384) {
+        return 32
+    }
     if (cipherSuite == TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256) {
         return 32
     }
     throw CryptoException(Unsupported, "TLS1.3 cipher suite key length is unsupported: ${cipherSuite}")
+}
+
+/**
+ * tls13CipherSuiteHashAlgorithm.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func tls13CipherSuiteHashAlgorithm(cipherSuite: Int64): HashAlgorithm {
+    if (cipherSuite == TLS13_CIPHER_SUITE_AES_256_GCM_SHA384) {
+        return HashAlgorithm.SHA384
+    }
+    if (
+        cipherSuite == TLS13_CIPHER_SUITE_AES_128_GCM_SHA256 ||
+        cipherSuite == TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256
+    ) {
+        return HashAlgorithm.SHA256
+    }
+    throw CryptoException(Unsupported, "TLS1.3 cipher suite hash is unsupported: ${cipherSuite}")
+}
+
+/**
+ * tls13CipherSuiteHashLen.
+ *
+ * @throws CryptoException 当操作失败时抛出
+ */
+public func tls13CipherSuiteHashLen(cipherSuite: Int64): Int64 {
+    tls13HashLenForAlgorithm(tls13CipherSuiteHashAlgorithm(cipherSuite))
 }
 
 public func tls13CipherSuiteIvLen(cipherSuite: Int64): Int64 {
@@ -1461,19 +1493,18 @@ public func tls13BuildServerHandshakeContextEcdheP256(
 
     let serverHello = tls13BuildServerHelloForEcdhe(encodedClientHello, serverKeyShare)
     let serverHelloMessage = tlsDecodeServerHelloHandshake(serverHello)
-    let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHelloMessage.cipherSuite)
+    let selectedCipherSuite = serverHelloMessage.cipherSuite
     let encryptedExtensions = tls13BuildEncryptedExtensions(
         selectedAlpn: selectedAlpn,
         acknowledgeServerName: shouldAckServerName
     )
-    let transcriptHash = sha256(concat(concat(encodedClientHello, serverHello), encryptedExtensions))
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, serverHello), encryptedExtensions))
     let clientPublicKey = tls13ExtractClientKeyShare(encodedClientHello)
-    let firstSecrets = tls13DeriveSecretsFromEcdhe(
+    let firstSecrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite
     )
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
@@ -1484,17 +1515,16 @@ public func tls13BuildServerHandshakeContextEcdheP256(
     )
 
     // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
-    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+    let fullTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(concat(concat(concat(
         encodedClientHello, serverHello), encryptedExtensions),
         authFlight.certificateHandshake), authFlight.certificateVerifyHandshake),
         authFlight.finishedHandshake))
-    let secrets = tls13DeriveSecretsFromEcdhe(
+    let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
-        appTranscriptHash: fullTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite,
+        appTranscriptHash: fullTranscriptHash
     )
 
     let flight = Tls13ServerHandshakeFlight(
@@ -1534,19 +1564,18 @@ public func tls13BuildServerHandshakeContextEcdheP384(
 
     let serverHello = tls13BuildServerHelloForEcdhe(encodedClientHello, serverKeyShare)
     let serverHelloMessage = tlsDecodeServerHelloHandshake(serverHello)
-    let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHelloMessage.cipherSuite)
+    let selectedCipherSuite = serverHelloMessage.cipherSuite
     let encryptedExtensions = tls13BuildEncryptedExtensions(
         selectedAlpn: selectedAlpn,
         acknowledgeServerName: shouldAckServerName
     )
-    let transcriptHash = sha256(concat(concat(encodedClientHello, serverHello), encryptedExtensions))
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, serverHello), encryptedExtensions))
     let clientPublicKey = tls13ExtractClientKeyShare(encodedClientHello)
-    let firstSecrets = tls13DeriveSecretsFromEcdhe(
+    let firstSecrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite
     )
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
@@ -1557,17 +1586,16 @@ public func tls13BuildServerHandshakeContextEcdheP384(
     )
 
     // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
-    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+    let fullTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(concat(concat(concat(
         encodedClientHello, serverHello), encryptedExtensions),
         authFlight.certificateHandshake), authFlight.certificateVerifyHandshake),
         authFlight.finishedHandshake))
-    let secrets = tls13DeriveSecretsFromEcdhe(
+    let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
-        appTranscriptHash: fullTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite,
+        appTranscriptHash: fullTranscriptHash
     )
 
     let flight = Tls13ServerHandshakeFlight(
@@ -1599,19 +1627,18 @@ public func tls13BuildServerHandshakeContextX25519(
 
     let serverHello = tls13BuildServerHelloForX25519(encodedClientHello, serverKeyShare)
     let serverHelloMessage = tlsDecodeServerHelloHandshake(serverHello)
-    let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHelloMessage.cipherSuite)
+    let selectedCipherSuite = serverHelloMessage.cipherSuite
     let encryptedExtensions = tls13BuildEncryptedExtensions(
         selectedAlpn: selectedAlpn,
         acknowledgeServerName: shouldAckServerName
     )
-    let transcriptHash = sha256(concat(concat(encodedClientHello, serverHello), encryptedExtensions))
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, serverHello), encryptedExtensions))
     let clientPublicKey = tls13ExtractClientX25519KeyShare(encodedClientHello)
-    let firstSecrets = tls13DeriveSecretsFromX25519(
+    let firstSecrets = tls13DeriveSecretsFromX25519ForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite
     )
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
@@ -1622,17 +1649,16 @@ public func tls13BuildServerHandshakeContextX25519(
     )
 
     // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
-    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+    let fullTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(concat(concat(concat(
         encodedClientHello, serverHello), encryptedExtensions),
         authFlight.certificateHandshake), authFlight.certificateVerifyHandshake),
         authFlight.finishedHandshake))
-    let secrets = tls13DeriveSecretsFromX25519(
+    let secrets = tls13DeriveSecretsFromX25519ForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
         transcriptHash,
-        appTranscriptHash: fullTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite,
+        appTranscriptHash: fullTranscriptHash
     )
 
     let flight = Tls13ServerHandshakeFlight(
@@ -1767,27 +1793,26 @@ public func tls13ProcessServerHandshakeFlightEcdheP256(
     if (clientKeyExchangePrivate.curve != P256) {
         throw CryptoException(InvalidArgument, "TLS1.3 ECDHE-P256 client context requires P-256 private key")
     }
-    let transcriptHash = sha256(concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
+    let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
+    let selectedCipherSuite = serverHello.cipherSuite
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
     if (!constantTimeEquals(transcriptHash, flight.transcriptHash)) {
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
 
     // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
-    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+    let fullTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(concat(concat(concat(
         encodedClientHello, flight.serverHello), flight.encryptedExtensions),
         flight.authFlight.certificateHandshake), flight.authFlight.certificateVerifyHandshake),
         flight.authFlight.finishedHandshake))
 
-    let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
-    let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHello.cipherSuite)
     let serverPublicKey = tls13ExtractServerKeyShare(flight.serverHello)
-    let secrets = tls13DeriveSecretsFromEcdhe(
+    let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         clientKeyExchangePrivate,
         serverPublicKey,
         transcriptHash,
-        appTranscriptHash: fullTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite,
+        appTranscriptHash: fullTranscriptHash
     )
     let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
         flight.authFlight,
@@ -1821,27 +1846,26 @@ public func tls13ProcessServerHandshakeFlightEcdheP384(
     if (clientKeyExchangePrivate.curve != P384) {
         throw CryptoException(InvalidArgument, "TLS1.3 ECDHE-P384 client context requires P-384 private key")
     }
-    let transcriptHash = sha256(concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
+    let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
+    let selectedCipherSuite = serverHello.cipherSuite
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
     if (!constantTimeEquals(transcriptHash, flight.transcriptHash)) {
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
 
     // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
-    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+    let fullTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(concat(concat(concat(
         encodedClientHello, flight.serverHello), flight.encryptedExtensions),
         flight.authFlight.certificateHandshake), flight.authFlight.certificateVerifyHandshake),
         flight.authFlight.finishedHandshake))
 
-    let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
-    let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHello.cipherSuite)
     let serverPublicKey = tls13ExtractServerKeyShare(flight.serverHello)
-    let secrets = tls13DeriveSecretsFromEcdhe(
+    let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         clientKeyExchangePrivate,
         serverPublicKey,
         transcriptHash,
-        appTranscriptHash: fullTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite,
+        appTranscriptHash: fullTranscriptHash
     )
     let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
         flight.authFlight,
@@ -1872,27 +1896,26 @@ public func tls13ProcessServerHandshakeFlightX25519(
     policy: X509VerificationPolicy,
     profile!: ?FipsProfile = None
 ): Tls13ClientHandshakeResult {
-    let transcriptHash = sha256(concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
+    let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
+    let selectedCipherSuite = serverHello.cipherSuite
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
     if (!constantTimeEquals(transcriptHash, flight.transcriptHash)) {
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
 
     // RFC 8446 §7.1: application traffic keys use Transcript-Hash(Hello…Finished)
-    let fullTranscriptHash = sha256(concat(concat(concat(concat(concat(
+    let fullTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(concat(concat(concat(
         encodedClientHello, flight.serverHello), flight.encryptedExtensions),
         flight.authFlight.certificateHandshake), flight.authFlight.certificateVerifyHandshake),
         flight.authFlight.finishedHandshake))
 
-    let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
-    let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(serverHello.cipherSuite)
     let serverPublicKey = tls13ExtractServerX25519KeyShare(flight.serverHello)
-    let secrets = tls13DeriveSecretsFromX25519(
+    let secrets = tls13DeriveSecretsFromX25519ForCipherSuite(
         clientKeyExchangePrivate,
         serverPublicKey,
         transcriptHash,
-        appTranscriptHash: fullTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        selectedCipherSuite,
+        appTranscriptHash: fullTranscriptHash
     )
     let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
         flight.authFlight,
@@ -2189,50 +2212,6 @@ public func tls13VerifyClientAuthFlightForCertificateRequestWithProfile(
     )
 }
 
-public func tls13BuildServerCertificateVerifyEcdsa(
-    privateKey: EcPrivateKey,
-    transcriptHash: Array<Byte>
-): Array<Byte> {
-    tls13BuildCertificateVerifyEcdsa(privateKey, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_SERVER)
-}
-
-public func tls13BuildClientCertificateVerifyEcdsa(
-    privateKey: EcPrivateKey,
-    transcriptHash: Array<Byte>
-): Array<Byte> {
-    tls13BuildCertificateVerifyEcdsa(privateKey, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_CLIENT)
-}
-
-public func tls13BuildServerCertificateVerifyRsaPss(
-    privateKey: RsaPrivateKey,
-    transcriptHash: Array<Byte>
-): Array<Byte> {
-    tls13BuildCertificateVerifyRsaPss(privateKey, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_SERVER)
-}
-
-public func tls13BuildClientCertificateVerifyRsaPss(
-    privateKey: RsaPrivateKey,
-    transcriptHash: Array<Byte>
-): Array<Byte> {
-    tls13BuildCertificateVerifyRsaPss(privateKey, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_CLIENT)
-}
-
-public func tls13VerifyServerCertificateVerify(
-    encodedCertificateVerify: Array<Byte>,
-    certificate: X509Certificate,
-    transcriptHash: Array<Byte>
-): Bool {
-    tls13VerifyCertificateVerify(encodedCertificateVerify, certificate, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_SERVER)
-}
-
-public func tls13VerifyClientCertificateVerify(
-    encodedCertificateVerify: Array<Byte>,
-    certificate: X509Certificate,
-    transcriptHash: Array<Byte>
-): Bool {
-    tls13VerifyCertificateVerify(encodedCertificateVerify, certificate, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_CLIENT)
-}
-
 /**
  * tls13DeriveSecretsFromEcdhe.
  *
@@ -2251,15 +2230,25 @@ public func tls13DeriveSecretsFromEcdhe(
     }
     tls13RequireSupportedEcdheCurve(privateKey.curve)
     tls13RequireHashAndLengths(transcriptHash, keyLen, ivLen)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(transcriptHash.size)
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
 
     let sharedSecret = ecdhDeriveSharedSecret(privateKey, peerPublicKey)
-    let zeros = Array<Byte>(TLS13_HASH_LEN, repeat: 0)
-    let emptyHash = sha256([])
+    let zeros = Array<Byte>(hashLen, repeat: 0)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
 
-    let earlySecret = tls13HkdfExtract(zeros, zeros)
-    let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
-    let handshakeSecret = tls13HkdfExtract(derivedEarly, sharedSecret)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
+    let earlySecret = tls13HkdfExtractWithHash(hashAlgorithm, zeros, zeros)
+    let derivedEarly = tls13DeriveSecretWithHash(hashAlgorithm, earlySecret, "derived", emptyHash)
+    let handshakeSecret = tls13HkdfExtractWithHash(hashAlgorithm, derivedEarly, sharedSecret)
+    tls13BuildSecretsFromStages(
+        earlySecret,
+        handshakeSecret,
+        transcriptHash,
+        keyLen,
+        ivLen,
+        appTranscriptHash: appTranscriptHash,
+        hashAlgorithm: hashAlgorithm
+    )
 }
 
 public func tls13DeriveSecretsFromEcdheForCipherSuite(
@@ -2270,6 +2259,11 @@ public func tls13DeriveSecretsFromEcdheForCipherSuite(
     appTranscriptHash!: Array<Byte> = []
 ): Tls13HandshakeSecrets {
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
+    let hashAlgorithm = tls13CipherSuiteHashAlgorithm(cipherSuite)
+    tls13RequireHashLengthForAlgorithm(transcriptHash, hashAlgorithm, "TLS1.3 transcript hash")
+    if (appTranscriptHash.size > 0) {
+        tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
+    }
     tls13DeriveSecretsFromEcdhe(
         privateKey,
         peerPublicKey,
@@ -2289,15 +2283,25 @@ public func tls13DeriveSecretsFromX25519(
     appTranscriptHash!: Array<Byte> = []   // RFC 8446 §7.1: override for app traffic keys
 ): Tls13HandshakeSecrets {
     tls13RequireHashAndLengths(transcriptHash, keyLen, ivLen)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(transcriptHash.size)
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
 
     let sharedSecret = x25519DeriveSharedSecret(privateKey, peerPublicKey)
-    let zeros = Array<Byte>(TLS13_HASH_LEN, repeat: 0)
-    let emptyHash = sha256([])
+    let zeros = Array<Byte>(hashLen, repeat: 0)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
 
-    let earlySecret = tls13HkdfExtract(zeros, zeros)
-    let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
-    let handshakeSecret = tls13HkdfExtract(derivedEarly, sharedSecret)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
+    let earlySecret = tls13HkdfExtractWithHash(hashAlgorithm, zeros, zeros)
+    let derivedEarly = tls13DeriveSecretWithHash(hashAlgorithm, earlySecret, "derived", emptyHash)
+    let handshakeSecret = tls13HkdfExtractWithHash(hashAlgorithm, derivedEarly, sharedSecret)
+    tls13BuildSecretsFromStages(
+        earlySecret,
+        handshakeSecret,
+        transcriptHash,
+        keyLen,
+        ivLen,
+        appTranscriptHash: appTranscriptHash,
+        hashAlgorithm: hashAlgorithm
+    )
 }
 
 public func tls13DeriveSecretsFromX25519ForCipherSuite(
@@ -2308,6 +2312,11 @@ public func tls13DeriveSecretsFromX25519ForCipherSuite(
     appTranscriptHash!: Array<Byte> = []
 ): Tls13HandshakeSecrets {
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
+    let hashAlgorithm = tls13CipherSuiteHashAlgorithm(cipherSuite)
+    tls13RequireHashLengthForAlgorithm(transcriptHash, hashAlgorithm, "TLS1.3 transcript hash")
+    if (appTranscriptHash.size > 0) {
+        tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
+    }
     tls13DeriveSecretsFromX25519(
         privateKey,
         peerPublicKey,
@@ -2334,13 +2343,23 @@ public func tls13DeriveSecretsFromPsk(
         throw CryptoException(InvalidArgument, "TLS1.3 PSK must not be empty")
     }
     tls13RequireHashAndLengths(transcriptHash, keyLen, ivLen)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(transcriptHash.size)
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
 
-    let zeros = Array<Byte>(TLS13_HASH_LEN, repeat: 0)
-    let emptyHash = sha256([])
-    let earlySecret = tls13HkdfExtract(zeros, psk)
-    let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
-    let handshakeSecret = tls13HkdfExtract(derivedEarly, zeros)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
+    let zeros = Array<Byte>(hashLen, repeat: 0)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
+    let earlySecret = tls13HkdfExtractWithHash(hashAlgorithm, zeros, psk)
+    let derivedEarly = tls13DeriveSecretWithHash(hashAlgorithm, earlySecret, "derived", emptyHash)
+    let handshakeSecret = tls13HkdfExtractWithHash(hashAlgorithm, derivedEarly, zeros)
+    tls13BuildSecretsFromStages(
+        earlySecret,
+        handshakeSecret,
+        transcriptHash,
+        keyLen,
+        ivLen,
+        appTranscriptHash: appTranscriptHash,
+        hashAlgorithm: hashAlgorithm
+    )
 }
 
 public func tls13DeriveSecretsFromPskForCipherSuite(
@@ -2350,6 +2369,11 @@ public func tls13DeriveSecretsFromPskForCipherSuite(
     appTranscriptHash!: Array<Byte> = []
 ): Tls13HandshakeSecrets {
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
+    let hashAlgorithm = tls13CipherSuiteHashAlgorithm(cipherSuite)
+    tls13RequireHashLengthForAlgorithm(transcriptHash, hashAlgorithm, "TLS1.3 transcript hash")
+    if (appTranscriptHash.size > 0) {
+        tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
+    }
     tls13DeriveSecretsFromPsk(
         psk,
         transcriptHash,
@@ -2376,15 +2400,29 @@ public func tls13DeriveSecretsFromPskAndX25519ForCipherSuite(
         throw CryptoException(InvalidArgument, "TLS1.3 PSK must not be empty")
     }
     let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
+    let hashAlgorithm = tls13CipherSuiteHashAlgorithm(cipherSuite)
+    tls13RequireHashLengthForAlgorithm(transcriptHash, hashAlgorithm, "TLS1.3 transcript hash")
+    if (appTranscriptHash.size > 0) {
+        tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
+    }
     tls13RequireHashAndLengths(transcriptHash, keyLen, ivLen)
 
     let sharedSecret = x25519DeriveSharedSecret(privateKey, peerPublicKey)
-    let zeros = Array<Byte>(TLS13_HASH_LEN, repeat: 0)
-    let emptyHash = sha256([])
-    let earlySecret = tls13HkdfExtract(zeros, psk)
-    let derivedEarly = tls13DeriveSecret(earlySecret, "derived", emptyHash)
-    let handshakeSecret = tls13HkdfExtract(derivedEarly, sharedSecret)
-    tls13BuildSecretsFromStages(earlySecret, handshakeSecret, transcriptHash, keyLen, ivLen, appTranscriptHash: appTranscriptHash)
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
+    let zeros = Array<Byte>(hashLen, repeat: 0)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
+    let earlySecret = tls13HkdfExtractWithHash(hashAlgorithm, zeros, psk)
+    let derivedEarly = tls13DeriveSecretWithHash(hashAlgorithm, earlySecret, "derived", emptyHash)
+    let handshakeSecret = tls13HkdfExtractWithHash(hashAlgorithm, derivedEarly, sharedSecret)
+    tls13BuildSecretsFromStages(
+        earlySecret,
+        handshakeSecret,
+        transcriptHash,
+        keyLen,
+        ivLen,
+        appTranscriptHash: appTranscriptHash,
+        hashAlgorithm: hashAlgorithm
+    )
 }
 
 /**
@@ -2402,12 +2440,14 @@ public func tls13DeriveEarlyDataSecrets(
         throw CryptoException(InvalidArgument, "TLS1.3 PSK must not be empty")
     }
     tls13RequireHashAndLengths(clientHelloHash, keyLen, ivLen)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(clientHelloHash.size)
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
 
-    let zeros = Array<Byte>(TLS13_HASH_LEN, repeat: 0)
-    let earlySecret = tls13HkdfExtract(zeros, psk)
-    let clientEarlyTraffic = tls13DeriveSecret(earlySecret, "c e traffic", clientHelloHash)
-    let clientEarlyWriteKey = tls13HkdfExpandLabel(clientEarlyTraffic, "key", [], keyLen)
-    let clientEarlyWriteIv = tls13HkdfExpandLabel(clientEarlyTraffic, "iv", [], ivLen)
+    let zeros = Array<Byte>(hashLen, repeat: 0)
+    let earlySecret = tls13HkdfExtractWithHash(hashAlgorithm, zeros, psk)
+    let clientEarlyTraffic = tls13DeriveSecretWithHash(hashAlgorithm, earlySecret, "c e traffic", clientHelloHash)
+    let clientEarlyWriteKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, clientEarlyTraffic, "key", [], keyLen)
+    let clientEarlyWriteIv = tls13HkdfExpandLabelWithHash(hashAlgorithm, clientEarlyTraffic, "iv", [], ivLen)
     Tls13EarlyDataSecrets(clientEarlyTraffic, clientEarlyWriteKey, clientEarlyWriteIv)
 }
 
@@ -2420,11 +2460,11 @@ public func tls13ComputeFinishedVerifyData(baseTrafficSecret: Array<Byte>, trans
     if (baseTrafficSecret.size == 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 finished base secret must not be empty")
     }
-    if (transcriptHash.size != TLS13_HASH_LEN) {
-        throw CryptoException(InvalidArgument, "TLS1.3 transcript hash must be SHA-256 sized")
-    }
-    let finishedKey = tls13HkdfExpandLabel(baseTrafficSecret, "finished", [], TLS13_HASH_LEN)
-    hmac(HashAlgorithm.SHA256, finishedKey, transcriptHash)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(transcriptHash.size)
+    tls13RequireHashLengthForAlgorithm(baseTrafficSecret, hashAlgorithm, "TLS1.3 finished base secret")
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
+    let finishedKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, baseTrafficSecret, "finished", [], hashLen)
+    hmac(hashAlgorithm, finishedKey, transcriptHash)
 }
 
 public func tls13BuildKeyUpdateHandshake(requestPeerUpdate!: Bool = false): Array<Byte> {
@@ -2458,7 +2498,14 @@ public func tls13DecodeKeyUpdateHandshake(encodedKeyUpdate: Array<Byte>): Bool {
 
 public func tls13DeriveNextApplicationTrafficSecret(currentTrafficSecret: Array<Byte>): Array<Byte> {
     tls13RequireTrafficSecret(currentTrafficSecret, "TLS1.3 application traffic secret")
-    tls13HkdfExpandLabel(currentTrafficSecret, "traffic upd", [], TLS13_HASH_LEN)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(currentTrafficSecret.size)
+    tls13HkdfExpandLabelWithHash(
+        hashAlgorithm,
+        currentTrafficSecret,
+        "traffic upd",
+        [],
+        tls13HashLenForAlgorithm(hashAlgorithm)
+    )
 }
 
 public func tls13DeriveApplicationTrafficKeyIv(
@@ -2468,9 +2515,10 @@ public func tls13DeriveApplicationTrafficKeyIv(
 ): (Array<Byte>, Array<Byte>) {
     tls13RequireTrafficSecret(applicationTrafficSecret, "TLS1.3 application traffic secret")
     tls13RequireKeyIvLengths(keyLen, ivLen)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(applicationTrafficSecret.size)
 
-    let writeKey = tls13HkdfExpandLabel(applicationTrafficSecret, "key", [], keyLen)
-    let writeIv = tls13HkdfExpandLabel(applicationTrafficSecret, "iv", [], ivLen)
+    let writeKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, applicationTrafficSecret, "key", [], keyLen)
+    let writeIv = tls13HkdfExpandLabelWithHash(hashAlgorithm, applicationTrafficSecret, "iv", [], ivLen)
     (writeKey, writeIv)
 }
 
@@ -2525,10 +2573,9 @@ public func tls13DeriveExporterMasterSecret(masterSecret: Array<Byte>, transcrip
     if (masterSecret.size == 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 master secret must not be empty")
     }
-    if (transcriptHash.size != TLS13_HASH_LEN) {
-        throw CryptoException(InvalidArgument, "TLS1.3 transcript hash must be SHA-256 sized")
-    }
-    tls13DeriveSecret(masterSecret, "exp master", transcriptHash)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(transcriptHash.size)
+    tls13RequireHashLengthForAlgorithm(masterSecret, hashAlgorithm, "TLS1.3 master secret")
+    tls13DeriveSecretWithHash(hashAlgorithm, masterSecret, "exp master", transcriptHash)
 }
 
 /**
@@ -2552,10 +2599,11 @@ public func tls13ExportKeyingMaterial(
         throw CryptoException(InvalidArgument, "TLS1.3 exporter label must not be empty")
     }
 
-    let emptyHash = sha256([])
-    let contextHash = sha256(context)
-    let exporterSecret = tls13DeriveSecret(exporterMasterSecret, normalizedLabel, emptyHash)
-    tls13HkdfExpandLabel(exporterSecret, "exporter", contextHash, outputLen)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(exporterMasterSecret.size)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
+    let contextHash = tls13HashWithAlgorithm(hashAlgorithm, context)
+    let exporterSecret = tls13DeriveSecretWithHash(hashAlgorithm, exporterMasterSecret, normalizedLabel, emptyHash)
+    tls13HkdfExpandLabelWithHash(hashAlgorithm, exporterSecret, "exporter", contextHash, outputLen)
 }
 
 public func tls13EncodeNewSessionTicketHandshake(message: Tls13NewSessionTicketMessage): Array<Byte> {
@@ -2962,26 +3010,30 @@ private func tls13BuildSecretsFromStages(
     transcriptHash: Array<Byte>,
     keyLen: Int64,
     ivLen: Int64,
-    appTranscriptHash!: Array<Byte> = []   // RFC 8446 §7.1: app traffic keys use Hello…Finished transcript; empty = use transcriptHash
+    appTranscriptHash!: Array<Byte> = [],   // RFC 8446 §7.1: app traffic keys use Hello…Finished transcript; empty = use transcriptHash
+    hashAlgorithm!: HashAlgorithm = HashAlgorithm.SHA256
 ): Tls13HandshakeSecrets {
     // Use appTranscriptHash if provided (non-empty), otherwise fall back to transcriptHash
     let appHash = if (appTranscriptHash.size > 0) { appTranscriptHash } else { transcriptHash }
-    let emptyHash = sha256([])
-    let zeros = Array<Byte>(TLS13_HASH_LEN, repeat: 0)
+    tls13RequireHashLengthForAlgorithm(transcriptHash, hashAlgorithm, "TLS1.3 transcript hash")
+    tls13RequireHashLengthForAlgorithm(appHash, hashAlgorithm, "TLS1.3 application transcript hash")
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
+    let zeros = Array<Byte>(hashLen, repeat: 0)
 
-    let clientHsTrafficSecret = tls13DeriveSecret(handshakeSecret, "c hs traffic", transcriptHash)
-    let serverHsTrafficSecret = tls13DeriveSecret(handshakeSecret, "s hs traffic", transcriptHash)
+    let clientHsTrafficSecret = tls13DeriveSecretWithHash(hashAlgorithm, handshakeSecret, "c hs traffic", transcriptHash)
+    let serverHsTrafficSecret = tls13DeriveSecretWithHash(hashAlgorithm, handshakeSecret, "s hs traffic", transcriptHash)
 
-    let derivedHandshake = tls13DeriveSecret(handshakeSecret, "derived", emptyHash)
-    let masterSecret = tls13HkdfExtract(derivedHandshake, zeros)
+    let derivedHandshake = tls13DeriveSecretWithHash(hashAlgorithm, handshakeSecret, "derived", emptyHash)
+    let masterSecret = tls13HkdfExtractWithHash(hashAlgorithm, derivedHandshake, zeros)
 
-    let clientAppTrafficSecret = tls13DeriveSecret(masterSecret, "c ap traffic", appHash)
-    let serverAppTrafficSecret = tls13DeriveSecret(masterSecret, "s ap traffic", appHash)
+    let clientAppTrafficSecret = tls13DeriveSecretWithHash(hashAlgorithm, masterSecret, "c ap traffic", appHash)
+    let serverAppTrafficSecret = tls13DeriveSecretWithHash(hashAlgorithm, masterSecret, "s ap traffic", appHash)
 
-    let clientWriteKey = tls13HkdfExpandLabel(clientAppTrafficSecret, "key", [], keyLen)
-    let serverWriteKey = tls13HkdfExpandLabel(serverAppTrafficSecret, "key", [], keyLen)
-    let clientWriteIv = tls13HkdfExpandLabel(clientAppTrafficSecret, "iv", [], ivLen)
-    let serverWriteIv = tls13HkdfExpandLabel(serverAppTrafficSecret, "iv", [], ivLen)
+    let clientWriteKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, clientAppTrafficSecret, "key", [], keyLen)
+    let serverWriteKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, serverAppTrafficSecret, "key", [], keyLen)
+    let clientWriteIv = tls13HkdfExpandLabelWithHash(hashAlgorithm, clientAppTrafficSecret, "iv", [], ivLen)
+    let serverWriteIv = tls13HkdfExpandLabelWithHash(hashAlgorithm, serverAppTrafficSecret, "iv", [], ivLen)
 
     Tls13HandshakeSecrets(
         earlySecret,
@@ -3008,11 +3060,13 @@ private func tls13CloneWithTrafficSecrets(
     tls13RequireTrafficSecret(clientAppTrafficSecret, "TLS1.3 client application traffic secret")
     tls13RequireTrafficSecret(serverAppTrafficSecret, "TLS1.3 server application traffic secret")
     tls13RequireKeyIvLengths(keyLen, ivLen)
+    let hashAlgorithm = tls13HashAlgorithmForHashLen(clientAppTrafficSecret.size)
+    tls13RequireHashLengthForAlgorithm(serverAppTrafficSecret, hashAlgorithm, "TLS1.3 server application traffic secret")
 
-    let clientWriteKey = tls13HkdfExpandLabel(clientAppTrafficSecret, "key", [], keyLen)
-    let serverWriteKey = tls13HkdfExpandLabel(serverAppTrafficSecret, "key", [], keyLen)
-    let clientWriteIv = tls13HkdfExpandLabel(clientAppTrafficSecret, "iv", [], ivLen)
-    let serverWriteIv = tls13HkdfExpandLabel(serverAppTrafficSecret, "iv", [], ivLen)
+    let clientWriteKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, clientAppTrafficSecret, "key", [], keyLen)
+    let serverWriteKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, serverAppTrafficSecret, "key", [], keyLen)
+    let clientWriteIv = tls13HkdfExpandLabelWithHash(hashAlgorithm, clientAppTrafficSecret, "iv", [], ivLen)
+    let serverWriteIv = tls13HkdfExpandLabelWithHash(hashAlgorithm, serverAppTrafficSecret, "iv", [], ivLen)
 
     Tls13HandshakeSecrets(
         base.earlySecret,
@@ -3050,146 +3104,8 @@ private func tls13VerifyAuthFlightIntegrity(
     }
 }
 
-private func tls13BuildCertificateVerifyEcdsa(
-    privateKey: EcPrivateKey,
-    transcriptHash: Array<Byte>,
-    contextLabel: String
-): Array<Byte> {
-    let signatureScheme = tls13ResolveEcdsaCertificateVerifyScheme(privateKey.curve)
-    let digest = tls13ComputeCertificateVerifyDigestForScheme(contextLabel, transcriptHash, signatureScheme)
-    let (r, s) = ecdsaSign(privateKey, digest)
-    let signature = tls13EncodeEcdsaSignatureDer(r, s)
-    tlsEncodeCertificateVerifyHandshake(
-        TlsCertificateVerifyMessage(signatureScheme, signature)
-    )
-}
-
-private func tls13BuildCertificateVerifyRsaPss(
-    privateKey: RsaPrivateKey,
-    transcriptHash: Array<Byte>,
-    contextLabel: String
-): Array<Byte> {
-    let digest = tls13ComputeCertificateVerifyDigestForScheme(
-        contextLabel,
-        transcriptHash,
-        TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256
-    )
-    let signature = rsaSignPssWithHash(
-        privateKey,
-        digest,
-        RsaHashAlgorithm.SHA256,
-        saltLen: TLS13_HASH_LEN
-    )
-    tlsEncodeCertificateVerifyHandshake(
-        TlsCertificateVerifyMessage(TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256, signature)
-    )
-}
-
-private func tls13VerifyCertificateVerify(
-    encodedCertificateVerify: Array<Byte>,
-    certificate: X509Certificate,
-    transcriptHash: Array<Byte>,
-    contextLabel: String
-): Bool {
-    let message = try {
-        tlsDecodeCertificateVerifyHandshake(encodedCertificateVerify)
-    } catch (_: CryptoException) {
-        return false
-    }
-    if (
-        message.signatureScheme == TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256 ||
-        message.signatureScheme == TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384
-    ) {
-        let publicKey = try {
-            x509ExtractEcPublicKey(certificate)
-        } catch (_: CryptoException) {
-            return false
-        }
-        if (!tls13IsCertificateCurveAllowedForScheme(publicKey.curve, message.signatureScheme)) {
-            return false
-        }
-        let digest = try {
-            tls13ComputeCertificateVerifyDigestForScheme(contextLabel, transcriptHash, message.signatureScheme)
-        } catch (_: CryptoException) {
-            return false
-        }
-        let (r, s) = try {
-            tls13DecodeEcdsaSignatureDer(message.signature)
-        } catch (_: CryptoException) {
-            return false
-        }
-        return ecdsaVerify(publicKey, digest, r, s)
-    }
-
-    if (message.signatureScheme == TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256) {
-        let publicKey = try {
-            x509ExtractRsaPublicKey(certificate)
-        } catch (_: CryptoException) {
-            return false
-        }
-        let digest = try {
-            tls13ComputeCertificateVerifyDigestForScheme(contextLabel, transcriptHash, message.signatureScheme)
-        } catch (_: CryptoException) {
-            return false
-        }
-        return rsaVerifyPssWithHash(
-            publicKey,
-            digest,
-            message.signature,
-            RsaHashAlgorithm.SHA256,
-            saltLen: TLS13_HASH_LEN
-        )
-    }
-
-    false
-}
-
-private func tls13ComputeCertificateVerifyDigestForScheme(
-    contextLabel: String,
-    transcriptHash: Array<Byte>,
-    signatureScheme: Int64
-): Array<Byte> {
-    if (transcriptHash.size != TLS13_HASH_LEN) {
-        throw CryptoException(InvalidArgument, "TLS1.3 transcript hash must be SHA-256 sized")
-    }
-    let contextBytes = contextLabel.toArray()
-    let input = Array<Byte>(TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size + 1 + transcriptHash.size, repeat: UInt8(0x20))
-    secureCopyInto(contextBytes, input, dstOffset: TLS13_CERT_VERIFY_PREFIX_LEN)
-    input[TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size] = UInt8(0x00)
-    secureCopyInto(transcriptHash, input, dstOffset: TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size + 1)
-    if (signatureScheme == TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256 || signatureScheme == TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256) {
-        return sha256(input)
-    }
-    if (signatureScheme == TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384) {
-        return sha384(input)
-    }
-    throw CryptoException(Unsupported, "TLS1.3 CertificateVerify signature scheme is unsupported: ${signatureScheme}")
-}
-
-private func tls13ResolveEcdsaCertificateVerifyScheme(curve: NamedCurve): Int64 {
-    if (curve == P256) {
-        return TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256
-    }
-    if (curve == P384) {
-        return TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384
-    }
-    throw CryptoException(Unsupported, "TLS1.3 ECDSA CertificateVerify curve is unsupported: ${curve.toString()}")
-}
-
-private func tls13IsCertificateCurveAllowedForScheme(curve: NamedCurve, signatureScheme: Int64): Bool {
-    if (signatureScheme == TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256) {
-        return curve == P256
-    }
-    if (signatureScheme == TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384) {
-        return curve == P384
-    }
-    false
-}
-
 private func tls13RequireHashAndLengths(transcriptHash: Array<Byte>, keyLen: Int64, ivLen: Int64): Unit {
-    if (transcriptHash.size != TLS13_HASH_LEN) {
-        throw CryptoException(InvalidArgument, "TLS1.3 transcript hash must be SHA-256 sized")
-    }
+    _ = tls13HashAlgorithmForHashLen(transcriptHash.size)
     tls13RequireKeyIvLengths(keyLen, ivLen)
 }
 
@@ -3199,6 +3115,51 @@ private func tls13KeyIvLensFromCipherSuite(cipherSuite: Int64): (Int64, Int64) {
     (keyLen, ivLen)
 }
 
+private func tls13HashLenForAlgorithm(algorithm: HashAlgorithm): Int64 {
+    if (algorithm == HashAlgorithm.SHA256) {
+        return TLS13_SHA256_HASH_LEN
+    }
+    if (algorithm == HashAlgorithm.SHA384) {
+        return TLS13_SHA384_HASH_LEN
+    }
+    throw CryptoException(Unsupported, "TLS1.3 hash algorithm is unsupported: ${algorithm.toString()}")
+}
+
+private func tls13HashAlgorithmForHashLen(hashLen: Int64): HashAlgorithm {
+    if (hashLen == TLS13_SHA256_HASH_LEN) {
+        return HashAlgorithm.SHA256
+    }
+    if (hashLen == TLS13_SHA384_HASH_LEN) {
+        return HashAlgorithm.SHA384
+    }
+    throw CryptoException(InvalidArgument, "TLS1.3 hash length must be SHA-256 or SHA-384 sized")
+}
+
+private func tls13HashWithAlgorithm(algorithm: HashAlgorithm, data: Array<Byte>): Array<Byte> {
+    if (algorithm == HashAlgorithm.SHA256) {
+        return sha256(data)
+    }
+    if (algorithm == HashAlgorithm.SHA384) {
+        return sha384(data)
+    }
+    throw CryptoException(Unsupported, "TLS1.3 hash algorithm is unsupported: ${algorithm.toString()}")
+}
+
+private func tls13HashForCipherSuite(cipherSuite: Int64, data: Array<Byte>): Array<Byte> {
+    tls13HashWithAlgorithm(tls13CipherSuiteHashAlgorithm(cipherSuite), data)
+}
+
+private func tls13RequireHashLengthForAlgorithm(
+    value: Array<Byte>,
+    algorithm: HashAlgorithm,
+    label: String
+): Unit {
+    let expectedLen = tls13HashLenForAlgorithm(algorithm)
+    if (value.size != expectedLen) {
+        throw CryptoException(InvalidArgument, "${label} must match ${algorithm.toString()} length")
+    }
+}
+
 private func tls13RequireKeyIvLengths(keyLen: Int64, ivLen: Int64): Unit {
     if (keyLen <= 0 || ivLen <= 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 key/iv lengths must be > 0")
@@ -3206,9 +3167,7 @@ private func tls13RequireKeyIvLengths(keyLen: Int64, ivLen: Int64): Unit {
 }
 
 private func tls13RequireTrafficSecret(secret: Array<Byte>, label: String): Unit {
-    if (secret.size != TLS13_HASH_LEN) {
-        throw CryptoException(InvalidArgument, "${label} must be SHA-256 sized")
-    }
+    _ = tls13HashAlgorithmForHashLen(secret.size)
 }
 
 private func tls13RequireClientVersion(clientHello: TlsClientHello): Unit {
@@ -3250,6 +3209,9 @@ private func tls13SelectCipherSuite(offered: Array<Int64>): Int64 {
     var i = 0
     while (i < offered.size) {
         let suite = offered[i]
+        if (suite == TLS13_CIPHER_TLS_AES_256_GCM_SHA384) {
+            return TLS13_CIPHER_TLS_AES_256_GCM_SHA384
+        }
         if (suite == TLS13_CIPHER_TLS_CHACHA20_POLY1305_SHA256) {
             return TLS13_CIPHER_TLS_CHACHA20_POLY1305_SHA256
         }
@@ -3939,15 +3901,29 @@ private func tls13TryDecodeSessionTicket(encodedTicket: Array<Byte>): ?TlsSessio
 }
 
 private func tls13HkdfExtract(salt: Array<Byte>, ikm: Array<Byte>): Array<Byte> {
+    tls13HkdfExtractWithHash(HashAlgorithm.SHA256, salt, ikm)
+}
+
+private func tls13HkdfExtractWithHash(algorithm: HashAlgorithm, salt: Array<Byte>, ikm: Array<Byte>): Array<Byte> {
+    let hashLen = tls13HashLenForAlgorithm(algorithm)
     let normalizedSalt = if (salt.size == 0) {
-        Array<Byte>(TLS13_HASH_LEN, repeat: 0)
+        Array<Byte>(hashLen, repeat: 0)
     } else {
         salt
     }
-    hmac(HashAlgorithm.SHA256, normalizedSalt, ikm)
+    hmac(algorithm, normalizedSalt, ikm)
 }
 
 private func tls13HkdfExpand(prk: Array<Byte>, info: Array<Byte>, outputLen: Int64): Array<Byte> {
+    tls13HkdfExpandWithHash(HashAlgorithm.SHA256, prk, info, outputLen)
+}
+
+private func tls13HkdfExpandWithHash(
+    algorithm: HashAlgorithm,
+    prk: Array<Byte>,
+    info: Array<Byte>,
+    outputLen: Int64
+): Array<Byte> {
     if (outputLen < 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 HKDF output length must be >= 0")
     }
@@ -3972,7 +3948,7 @@ private func tls13HkdfExpand(prk: Array<Byte>, info: Array<Byte>, outputLen: Int
         }
         input[input.size - 1] = UInt8(counter)
 
-        t = hmac(HashAlgorithm.SHA256, prk, input)
+        t = hmac(algorithm, prk, input)
         let remain = outputLen - offset
         let take = if (remain < t.size) {
             remain
@@ -3991,6 +3967,16 @@ private func tls13HkdfExpand(prk: Array<Byte>, info: Array<Byte>, outputLen: Int
 }
 
 private func tls13HkdfExpandLabel(secret: Array<Byte>, label: String, context: Array<Byte>, outputLen: Int64): Array<Byte> {
+    tls13HkdfExpandLabelWithHash(HashAlgorithm.SHA256, secret, label, context, outputLen)
+}
+
+private func tls13HkdfExpandLabelWithHash(
+    algorithm: HashAlgorithm,
+    secret: Array<Byte>,
+    label: String,
+    context: Array<Byte>,
+    outputLen: Int64
+): Array<Byte> {
     let fullLabel = "tls13 ${label}".toArray()
     if (fullLabel.size > 255 || context.size > 255) {
         throw CryptoException(OutOfBounds, "TLS1.3 HKDF label/context is too long")
@@ -4005,11 +3991,26 @@ private func tls13HkdfExpandLabel(secret: Array<Byte>, label: String, context: A
     if (context.size > 0) {
         secureCopyInto(context, hkdfLabel, dstOffset: 4 + fullLabel.size)
     }
-    tls13HkdfExpand(secret, hkdfLabel, outputLen)
+    tls13HkdfExpandWithHash(algorithm, secret, hkdfLabel, outputLen)
 }
 
 private func tls13DeriveSecret(secret: Array<Byte>, label: String, transcriptHash: Array<Byte>): Array<Byte> {
     tls13HkdfExpandLabel(secret, label, transcriptHash, TLS13_HASH_LEN)
+}
+
+private func tls13DeriveSecretWithHash(
+    algorithm: HashAlgorithm,
+    secret: Array<Byte>,
+    label: String,
+    transcriptHash: Array<Byte>
+): Array<Byte> {
+    tls13HkdfExpandLabelWithHash(
+        algorithm,
+        secret,
+        label,
+        transcriptHash,
+        tls13HashLenForAlgorithm(algorithm)
+    )
 }
 
 private func tls13RequireSupportedEcdheCurve(curve: NamedCurve): Unit {
@@ -4250,160 +4251,4 @@ private func tls13ConcatCertArray(left: Array<X509Certificate>, right: Array<X50
         i += 1
     }
     out
-}
-
-private func tls13EncodeEcdsaSignatureDer(r: BigNum, s: BigNum): Array<Byte> {
-    let encodedR = tls13DerEncodeUnsignedInteger(r, "TLS1.3 ECDSA signature.r")
-    let encodedS = tls13DerEncodeUnsignedInteger(s, "TLS1.3 ECDSA signature.s")
-    let payload = concat(encodedR, encodedS)
-    tls13DerWrap(0x30, payload)
-}
-
-private func tls13DecodeEcdsaSignatureDer(signatureDer: Array<Byte>): (BigNum, BigNum) {
-    let (tag, sequenceValue, consumed) = tls13DerReadElement(signatureDer, 0, "TLS1.3 ECDSA signature")
-    if (tag != 0x30) {
-        throw CryptoException(ParseError, "TLS1.3 ECDSA signature must be DER SEQUENCE")
-    }
-    if (consumed != signatureDer.size) {
-        throw CryptoException(ParseError, "TLS1.3 ECDSA signature has trailing bytes")
-    }
-
-    let (rTag, rValue, rConsumed) = tls13DerReadElement(sequenceValue, 0, "TLS1.3 ECDSA signature.r")
-    if (rTag != 0x02) {
-        throw CryptoException(ParseError, "TLS1.3 ECDSA signature.r must be DER INTEGER")
-    }
-    let (sTag, sValue, sConsumed) = tls13DerReadElement(sequenceValue, rConsumed, "TLS1.3 ECDSA signature.s")
-    if (sTag != 0x02) {
-        throw CryptoException(ParseError, "TLS1.3 ECDSA signature.s must be DER INTEGER")
-    }
-    if (rConsumed + sConsumed != sequenceValue.size) {
-        throw CryptoException(ParseError, "TLS1.3 ECDSA signature sequence has trailing bytes")
-    }
-
-    let rBytes = tls13ParsePositiveDerInteger(rValue, "TLS1.3 ECDSA signature.r")
-    let sBytes = tls13ParsePositiveDerInteger(sValue, "TLS1.3 ECDSA signature.s")
-    (BigNum.fromBytesBE(rBytes), BigNum.fromBytesBE(sBytes))
-}
-
-private func tls13DerEncodeUnsignedInteger(value: BigNum, label: String): Array<Byte> {
-    if (value.isNegative() || value.isZero()) {
-        throw CryptoException(InvalidArgument, "${label} must be positive")
-    }
-    let magnitude = value.toBytesBE()
-    if (magnitude.size == 0) {
-        throw CryptoException(InvalidArgument, "${label} must not be empty")
-    }
-    let highBitSet = (Int64(UInt8(magnitude[0])) & 0x80) != 0
-    if (!highBitSet) {
-        return tls13DerWrap(0x02, magnitude)
-    }
-    let withPad = Array<Byte>(magnitude.size + 1, repeat: 0)
-    secureCopyInto(magnitude, withPad, dstOffset: 1)
-    tls13DerWrap(0x02, withPad)
-}
-
-private func tls13ParsePositiveDerInteger(value: Array<Byte>, label: String): Array<Byte> {
-    if (value.size == 0) {
-        throw CryptoException(ParseError, "${label} must not be empty")
-    }
-    if ((Int64(UInt8(value[0])) & 0x80) != 0) {
-        throw CryptoException(ParseError, "${label} must be non-negative")
-    }
-    if (value.size > 1 && UInt8(value[0]) == UInt8(0x00) && (Int64(UInt8(value[1])) & 0x80) == 0) {
-        throw CryptoException(ParseError, "${label} uses non-minimal encoding")
-    }
-    if (value.size > 1 && UInt8(value[0]) == UInt8(0x00)) {
-        return value[1..]
-    }
-    value
-}
-
-private func tls13DerWrap(tag: Int64, value: Array<Byte>): Array<Byte> {
-    if (tag < 0 || tag > 255) {
-        throw CryptoException(InvalidArgument, "DER tag must be uint8")
-    }
-    let length = tls13DerEncodeLength(value.size)
-    let out = Array<Byte>(1 + length.size + value.size, repeat: 0)
-    out[0] = UInt8(tag)
-    secureCopyInto(length, out, dstOffset: 1)
-    secureCopyInto(value, out, dstOffset: 1 + length.size)
-    out
-}
-
-private func tls13DerEncodeLength(length: Int64): Array<Byte> {
-    if (length < 0) {
-        throw CryptoException(OutOfBounds, "DER length must be non-negative")
-    }
-    if (length < 128) {
-        return [UInt8(length)]
-    }
-
-    let width = if (length <= 0xff) {
-        1
-    } else if (length <= 0xffff) {
-        2
-    } else if (length <= 0xffffff) {
-        3
-    } else if (length <= 0xffffffff) {
-        4
-    } else {
-        throw CryptoException(OutOfBounds, "DER length exceeds 4-byte support limit")
-    }
-
-    let out = Array<Byte>(1 + width, repeat: 0)
-    out[0] = UInt8(0x80 | width)
-    var i = 0
-    while (i < width) {
-        let shift = (width - 1 - i) * 8
-        out[1 + i] = UInt8((length >> shift) & 0xff)
-        i += 1
-    }
-    out
-}
-
-private func tls13DerReadElement(der: Array<Byte>, offset: Int64, label: String): (Int64, Array<Byte>, Int64) {
-    if (offset < 0 || offset >= der.size) {
-        throw CryptoException(ParseError, "${label} is truncated")
-    }
-    let tag = Int64(UInt8(der[offset]))
-    let (length, lengthBytes) = tls13DerDecodeLength(der, offset + 1, label)
-    let valueOffset = offset + 1 + lengthBytes
-    if (valueOffset + length > der.size) {
-        throw CryptoException(ParseError, "${label} value is truncated")
-    }
-    let value = der[valueOffset..(valueOffset + length)]
-    let consumed = 1 + lengthBytes + length
-    (tag, value, consumed)
-}
-
-private func tls13DerDecodeLength(der: Array<Byte>, offset: Int64, label: String): (Int64, Int64) {
-    if (offset < 0 || offset >= der.size) {
-        throw CryptoException(ParseError, "${label} DER length is truncated")
-    }
-    let first = Int64(UInt8(der[offset]))
-    if ((first & 0x80) == 0) {
-        return (first, 1)
-    }
-
-    let width = first & 0x7f
-    if (width == 0) {
-        throw CryptoException(ParseError, "${label} DER length uses indefinite form")
-    }
-    if (width > 4) {
-        throw CryptoException(ParseError, "${label} DER length width is too large")
-    }
-    if (offset + 1 + width > der.size) {
-        throw CryptoException(ParseError, "${label} DER length is truncated")
-    }
-
-    var length: Int64 = 0
-    var i = 0
-    while (i < width) {
-        length = (length << 8) | Int64(UInt8(der[offset + 1 + i]))
-        i += 1
-    }
-    if (length < 128) {
-        throw CryptoException(ParseError, "${label} DER length uses non-minimal long form")
-    }
-    (length, 1 + width)
 }
