@@ -105,7 +105,14 @@ public func tls13BuildHttpClientHelloX25519(
     serverName: String,
     alpnProtocols!: Array<String> = []
 ): Array<Byte> {
-    let baseHello = tlsDecodeClientHelloHandshake(tls13BuildClientHelloX25519(clientKeyShare))
+    let baseHello = tlsDecodeClientHelloHandshake(tls13BuildClientHelloX25519WithCipherSuites(
+        clientKeyShare,
+        [
+            TLS13_CIPHER_SUITE_AES_256_GCM_SHA384,
+            TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+            TLS13_CIPHER_SUITE_AES_128_GCM_SHA256
+        ]
+    ))
     tls13BuildHttpClientHelloFromBase(baseHello, serverName, alpnProtocols)
 }
 

@@ -4,7 +4,7 @@ import std.collection.ArrayList
 import std.fs.*
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.compliance.*
-import jinguissl_core.crypto.digest.sha256
+import jinguissl_core.crypto.digest.{sha256, sha384}
 import jinguissl_core.crypto.ecc.*
 import jinguissl_core.crypto.error.CryptoException
 import jinguissl_core.crypto.tls.*
@@ -191,9 +191,13 @@ public class Tls13HandshakeFlowTestSuite {
     @TestCase
     public func testTls13X25519CipherSuiteSelectionAndRecordLayerHandle(): Unit {
         @Assert(TLS13_CIPHER_SUITE_AES_128_GCM_SHA256, 0x1301)
+        @Assert(TLS13_CIPHER_SUITE_AES_256_GCM_SHA384, 0x1302)
         @Assert(TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256, 0x1303)
         @Assert(tls13CipherSuiteAeadAlgorithm(TLS13_CIPHER_SUITE_AES_128_GCM_SHA256).toString(), "AES-GCM")
+        @Assert(tls13CipherSuiteAeadAlgorithm(TLS13_CIPHER_SUITE_AES_256_GCM_SHA384).toString(), "AES-GCM")
         @Assert(tls13CipherSuiteAeadAlgorithm(TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256).toString(), "CHACHA20-POLY1305")
+        @Assert(tls13CipherSuiteHashAlgorithm(TLS13_CIPHER_SUITE_AES_256_GCM_SHA384).toString(), "SHA-384")
+        @Assert(tls13CipherSuiteHashLen(TLS13_CIPHER_SUITE_AES_256_GCM_SHA384), 48)
         let clientPrivate = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
         let serverPrivate = hexToBytes("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
         let clientPublic = x25519PublicFromPrivate(clientPrivate)
@@ -248,6 +252,49 @@ public class Tls13HandshakeFlowTestSuite {
         let rotatedEncrypted = rotatedClientHandle.seal(ApplicationData, rotatedPayload)
         let rotatedOpened = rotatedServerHandle.open(rotatedEncrypted)
         @Assert(rotatedOpened.fragment, rotatedPayload)
+    }
+
+    @TestCase
+    public func testTls13X25519Aes256GcmSha384RecordLayerHandle(): Unit {
+        let clientPrivate = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+        let serverPrivate = hexToBytes("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
+        let clientPublic = x25519PublicFromPrivate(clientPrivate)
+        let serverPublic = x25519PublicFromPrivate(serverPrivate)
+
+        let clientHello = tls13BuildClientHelloX25519WithCipherSuites(
+            clientPublic,
+            [TLS13_CIPHER_SUITE_AES_256_GCM_SHA384]
+        )
+        let serverHello = tls13BuildServerHelloForX25519(clientHello, serverPublic)
+        let selectedCipherSuite = tlsDecodeServerHelloHandshake(serverHello).cipherSuite
+        @Assert(selectedCipherSuite, TLS13_CIPHER_SUITE_AES_256_GCM_SHA384)
+        @Assert(tls13CipherSuiteKeyLen(selectedCipherSuite), 32)
+        @Assert(tls13CipherSuiteHashLen(selectedCipherSuite), 48)
+
+        let transcriptHash = sha384(concat(clientHello, serverHello))
+        let clientSecrets = tls13DeriveSecretsFromX25519ForCipherSuite(
+            clientPrivate,
+            serverPublic,
+            transcriptHash,
+            selectedCipherSuite
+        )
+        let serverSecrets = tls13DeriveSecretsFromX25519ForCipherSuite(
+            serverPrivate,
+            clientPublic,
+            transcriptHash,
+            selectedCipherSuite
+        )
+        @Assert(clientSecrets.clientHsTrafficSecret.size, 48)
+        @Assert(serverSecrets.serverHsTrafficSecret.size, 48)
+        @Assert(clientSecrets.clientWriteKey.size, 32)
+        @Assert(serverSecrets.serverWriteKey.size, 32)
+
+        let clientHandle = tls13CreateClientRecordLayerHandle(clientSecrets, selectedCipherSuite)
+        let serverHandle = tls13CreateServerRecordLayerHandle(serverSecrets, selectedCipherSuite)
+        let payload = "tls13-x25519-aes256-gcm-sha384".toArray()
+        let encrypted = clientHandle.seal(ApplicationData, payload)
+        let opened = serverHandle.open(encrypted)
+        @Assert(opened.fragment, payload)
     }
 
     @TestCase
@@ -1672,6 +1719,14 @@ public class Tls13HandshakeFlowTestSuite {
             alpnProtocols: ["http/1.1"]
         )
         let x25519Summary = tls13SummarizeClientHello(x25519Hello)
+        @Assert(
+            x25519Summary.cipherSuites,
+            [
+                TLS13_CIPHER_SUITE_AES_256_GCM_SHA384,
+                TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+                TLS13_CIPHER_SUITE_AES_128_GCM_SHA256
+            ]
+        )
         @Assert(x25519Summary.serverNames, [TEST_HOST_API])
         @Assert(x25519Summary.alpnProtocols, ["http/1.1"])
         @Assert(x25519Summary.supportedVersions, [TLS13_VERSION_TEST])
@@ -1758,7 +1813,7 @@ public class Tls13HandshakeFlowTestSuite {
 
         let report = tls13PrecheckEncodedClientHelloInterop(x25519Hello, profile)
         @Assert(report.ready, false)
-        @Assert(tls13TestContainsString(report.missing, "missing cipher_suite 4866"), true)
+        @Assert(tls13TestContainsString(report.missing, "missing cipher_suite 4866"), false)
         @Assert(tls13TestContainsString(report.missing, "missing key_share_group 4588"), true)
         @Assert(tls13TestContainsString(report.missing, "missing supported_group 4588"), true)
     }

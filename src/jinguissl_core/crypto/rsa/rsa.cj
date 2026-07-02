@@ -440,10 +440,22 @@ private func rsaPrivateTransform(key: RsaPrivateKey, input: Array<Byte>): Array<
     if (m.cmp(modulus) >= 0) {
         throw CryptoException(InvalidArgument, "RSA input representative out of range")
     }
-    // Security policy: never continue with unblinded private exponentiation if blinding cannot be prepared.
+    // Security policy: never continue with unblinded private exponentiation if
+    // blinding cannot be prepared. The private exponentiation still delegates
+    // to BigNum.modExp, so this is blinding/fail-closed hardening rather than
+    // constant-time certification.
     let (blinded, blindInverse) = rsaBlindInput(m, key.publicKey, k)
     let blindedResult = blinded.modExp(key.privateExponent, modulus)
     blindedResult.mul(blindInverse).mod(modulus).toBytesBE(paddedLen: k)
+}
+
+/**
+ * @internal - raw RSA private transform for protocol internals that need to
+ * parse their own padding. This preserves RSA blinding and fail-closed policy;
+ * it is not a padding API, contract facade, or constant-time certificate.
+ */
+public func rsaPrivateTransformRawForProtocol(key: RsaPrivateKey, input: Array<Byte>): Array<Byte> {
+    rsaPrivateTransform(key, input)
 }
 
 /** @internal - deterministic RSA blinding policy hook for Core tests; not a contract facade. */

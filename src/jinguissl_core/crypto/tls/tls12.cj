@@ -7,7 +7,7 @@ import jinguissl_core.crypto.compliance.{FipsProfile}
 import jinguissl_core.crypto.digest.{hmac, HashAlgorithm}
 import jinguissl_core.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecdhDeriveSharedSecret, requireFipsCurve}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
-import jinguissl_core.crypto.rsa.{RsaPrivateKey, RsaPublicKey}
+import jinguissl_core.crypto.rsa.{RsaPrivateKey, RsaPublicKey, rsaPrivateTransformRawForProtocol}
 import jinguissl_core.crypto.utils.{randomSeed, secureCopyInto}
 import jinguissl_core.crypto.x509.{X509Certificate, X509VerificationPolicy, X509VerificationResult, x509ParseDer, x509VerifyCertificateChain, x509VerifyCertificateChainWithProfile}
 
@@ -548,11 +548,11 @@ private func rsaPkcs1v15Decrypt(privateKey: RsaPrivateKey, ciphertext: Array<Byt
         throw CryptoException(ParseError, "RSA ciphertext length mismatch")
     }
 
-    let c = BigNum.fromBytesBE(ciphertext)
-    if (c.cmp(modulus) >= 0) {
-        throw CryptoException(ParseError, "RSA ciphertext representative out of range")
+    let em = try {
+        rsaPrivateTransformRawForProtocol(privateKey, ciphertext)
+    } catch (e: CryptoException) {
+        throw CryptoException(ParseError, e.message)
     }
-    let em = c.modExp(privateKey.privateExponent, modulus).toBytesBE(paddedLen: k)
 
     if (UInt8(em[0]) != UInt8(0x00) || UInt8(em[1]) != UInt8(0x02)) {
         throw CryptoException(ParseError, "RSA PKCS1v1.5 decrypted block has invalid prefix")
