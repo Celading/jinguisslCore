@@ -9,7 +9,7 @@
 <span style="font-weight:100;font-size:24px">JinguiSSL 的算法与协议底层实现</span>
 <p align="center">
   <strong>面向需要直接控制密码原语、X.509、TLS 与 SSH 细节的仓颉开发者</strong><br/>
-  <sub>AES · ChaCha20-Poly1305 · RSA · ECC · Ed25519 · X25519 · X.509 · TLS · SSH</sub>
+  <sub>AES · ChaCha20-Poly1305 · RSA · ECC · X25519 · X.509 · TLS · SSH</sub>
 </p>
 </div>
 
@@ -29,7 +29,7 @@
 
 - 对称密码：`AES`、`ChaCha20`、`Poly1305`、`SM4`
 - 摘要与派生：`MD5`、`SHA-1`、`SHA-256/384/512`、`HMAC`、`HKDF`
-- 非对称密码：`RSA`、`ECC`、`Ed25519`、`X25519`
+- 非对称密码：`RSA`、`ECC`、`X25519`；`Ed25519` 当前作为内部 / 协议消费面保留
 - 证书与合规：`X.509`、PEM/DER 解析、证书链验证、FIPS profile
 - 协议能力：`TLS 1.2`、`TLS 1.3`、`SSH transport / handshake`
 - 工具与性能：大数兼容层、性能基准、测试向量与协议流测试
@@ -61,20 +61,14 @@ RC4 已不适合作为现代 TLS / HTTPS 的默认兼容方向；如果未来确
 jinguissl_core = { git = "https://gitcode.com/CjKu/JinguiCore.git" }
 ```
 
-### 示例：Ed25519 签名与验签
+### 示例：SHA-256 摘要
 
 ```cangjie
-import jinguissl_core.crypto.digest.bytesToHexLower
-import jinguissl_core.crypto.ed25519.*
+import jinguissl_core.crypto.digest.{bytesToHexLower, sha256}
 
 main() {
-    let seed = ed25519GeneratePrivateKeySeed()
-    let publicKey = ed25519PublicKeyFromSeed(seed)
-    let message = "hello jingui".toArray()
-    let signature = ed25519Sign(seed, message)
-
-    println(bytesToHexLower(publicKey))
-    println(ed25519Verify(publicKey, message, signature))
+    let digest = sha256("hello jingui".toArray())
+    println(bytesToHexLower(digest))
 }
 ```
 
@@ -85,7 +79,8 @@ main() {
 | `crypto/aes` | AES block / CTR / GCM 相关实现 |
 | `crypto/chacha20` | ChaCha20 / Poly1305 / AEAD |
 | `crypto/digest` | Hash、HMAC、HKDF |
-| `crypto/rsa` / `crypto/ecc` / `crypto/ed25519` / `crypto/x25519` | 主流非对称能力 |
+| `crypto/rsa` / `crypto/ecc` / `crypto/x25519` | 主流非对称能力 |
+| `crypto/ed25519` | 当前保留为内部 / 协议消费面，不作为快速开始推荐入口 |
 | `crypto/x509` | 证书、私钥、链验证 |
 | `crypto/tls` | TLS handshake、record、session |
 | `crypto/ssh` | SSH transport、host verification、KEX |
@@ -150,6 +145,12 @@ JinguiSSL-core/
 - 上层 contract/facade 的实现基础
 - 框架或中间件的密码与协议功能底座
 - 仓颉生态里可复用的协议与密码能力参考实现
+
+## 生产级状态速记
+
+当前模块的 readiness 不一致：digest / HMAC / HKDF、ChaCha20-Poly1305、AES、X25519、X.509 等表面已有本地测试与部分 facade 支撑，可作为带明确限制的 production-candidate；ECC、RSA、Ed25519、TLS、SSH 等涉及私钥运算或协议互通的表面仍必须保留 side-channel、live interop、平台材料等非声明边界。
+
+因此本仓库可以称为“功能性密码学与协议实现 / 实验性密码底座 / 审计靶面”，但不应称为“已认证生产级密码后端”“OpenSSL 替代”或“浏览器级 HTTPS 互通实现”。
 
 ## 安全姿态说明
 
