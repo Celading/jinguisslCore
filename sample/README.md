@@ -28,6 +28,9 @@ cjpm build && cjpm run
 | [kem](kem/) | `crypto/kem` | RSA-KEM and ECDH-KEM encapsulation |
 | [compliance](compliance/) | `crypto/compliance` | FIPS 140 compliance profiles |
 | [utils](utils/) | `crypto/utils` | Utility functions (endian, constant-time, CSPRNG) |
+| [bignum](bignum/) | `crypto/bignum` | BigNum arithmetic, modular exponentiation, and GCD |
+| [ssh](ssh/) | `crypto/ssh` | SSH host key fingerprints and version banner |
+| [tls](tls/) | `crypto/tls` | TLS session ticket creation, encoding, and decoding |
 
 ## Prerequisites
 

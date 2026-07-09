@@ -347,3 +347,189 @@ let bobShared = x25519DeriveSharedSecret(bobPriv, alicePub)
 ```cangjie
 let clampedKey = x25519ClampPrivateKey(rawKey)
 ```
+---
+
+## BigNum (大数运算)
+
+`jinguissl_core.crypto.bignum.BigNum` 提供大整数运算，作为非对称密码（RSA、ECC 等）的底层基础。
+
+### 构造方式
+
+| 方法 | 说明 |
+|:--|:--|
+| `BigNum.zero()` | 创建 0 |
+| `BigNum.one()` | 创建 1 |
+| `BigNum.fromHex(hex)` | 从十六进制字符串创建 |
+| `BigNum.fromBytesBE(bytes)` | 从大端字节数组创建 |
+
+### 算术运算
+
+```cangjie
+import jinguissl_core.crypto.bignum.BigNum
+
+let a = BigNum.fromHex("1a2b3c")
+let b = BigNum.fromHex("0a")
+
+let sum = a.add(b)          // 加法
+let diff = a.sub(b)         // 减法
+let product = a.mul(b)      // 乘法
+let (q, r) = a.divMod(b)    // 除法与模
+let modResult = a.mod(b)    // 模运算
+```
+
+### 指数与模运算
+
+```cangjie
+let result = base.exp(exponent)              // 幂运算
+let modExpResult = base.modExp(exponent, m)  // 模幂
+let inv = value.modInverse(modulus)          // 模逆
+```
+
+### 位运算与移位
+
+```cangjie
+let shifted = BigNum.one().lshift(8)  // 1 << 8 = 0x100
+let unshifted = shifted.rshift(4)     // 0x100 >> 4 = 0x10
+```
+
+### 比较与转换
+
+```cangjie
+a.cmp(b)               // -1, 0, 1
+a == b                  // 相等判断
+a.toBytesBE()           // 转为大端字节数组
+a.toBytesBE(paddedLen: 4)  // 指定位数的填充
+a.toHex()               // 转为十六进制字符串
+a.isZero()              // 判断是否为 0
+a.isNegative()          // 判断是否为负
+```
+
+### GCD 与 ModSqrt
+
+```cangjie
+let gcd = BigNum.gcd(a, b)                          // 最大公约数
+let sqrt = BigNum.modSqrt(value, primeModulus)       // 模平方根
+```
+
+---
+
+## 基础类型 (Base)
+
+`jinguissl_core.crypto.base` 提供密码学安全的基础数据类型。
+
+### SecureBytes
+
+安全字节容器，提供自动清零和销毁能力：
+
+```cangjie
+import jinguissl_core.crypto.base.SecureBytes
+
+let sb = SecureBytes([1, 2, 3, 4])
+sb.size                 // 4
+sb.bytes()              // 获取副本
+sb.setAt(0, 99)         // 设置值
+sb.clear()              // 清零
+sb.destroy()            // 销毁（销毁后无法访问）
+sb.isDestroyed          // 查询销毁状态
+
+// 创建指定大小的零填充容器
+let zeros = SecureBytes.withSize(16)
+```
+
+### ByteBuffer
+
+动态字节缓冲区：
+
+```cangjie
+import jinguissl_core.crypto.base.ByteBuffer
+
+let buf = ByteBuffer()
+buf.append(UInt8(42))       // 添加单字节
+buf.append([1, 2, 3])       // 添加字节数组
+buf.size                    // 当前长度
+buf.toArray()               // 转为字节数组
+buf.clear()                 // 清空
+```
+
+### Endian
+
+字节序枚举：
+
+```cangjie
+import jinguissl_core.crypto.base.Endian
+
+Endian.Big      // 大端序
+Endian.Little   // 小端序
+```
+
+---
+
+## 错误处理 (Error)
+
+`jinguissl_core.crypto.error` 提供密码学异常类型。
+
+### CryptoException
+
+```cangjie
+import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
+
+try {
+    // some crypto operation
+} catch (e: CryptoException) {
+    println(e.code)      // 错误码
+    println(e.message)   // 错误消息
+}
+```
+
+### CryptoErrorCode 枚举值
+
+| 错误码 | 说明 |
+|:--|:--|
+| `InvalidArgument` | 非法参数 |
+| `OutOfBounds` | 越界 |
+| `DivideByZero` | 除以零 |
+| `NoModInverse` | 模逆不存在 |
+| `ComplianceRejected` | 合规拒绝 |
+| `ParseError` | 解析错误 |
+| `Unsupported` | 不支持的操作 |
+| `InternalError` | 内部错误 |
+
+---
+
+## 工具函数 (Utils)
+
+`jinguissl_core.crypto.utils` 提供端序转换、安全比较和随机数生成工具。
+
+### 端序转换
+
+```cangjie
+import jinguissl_core.crypto.utils.{bytesToUInt32BE, bytesToUInt32LE, uInt32ToBytesBE, uInt32ToBytesLE}
+
+let be = bytesToUInt32BE([0x12, 0x34, 0x56, 0x78])  // 0x12345678
+let le = bytesToUInt32LE([0x78, 0x56, 0x34, 0x12])  // 0x12345678
+let beBytes = uInt32ToBytesBE(0x12345678)            // [0x12, 0x34, 0x56, 0x78]
+let leBytes = uInt32ToBytesLE(0x12345678)            // [0x78, 0x56, 0x34, 0x12]
+```
+
+### 安全操作
+
+```cangjie
+import jinguissl_core.crypto.utils.{constantTimeEquals, secureCopy, secureCopyInto, secureZero}
+
+let equal = constantTimeEquals(a, b)   // 恒定时间比较
+let copy = secureCopy(source)          // 安全拷贝
+secureCopyInto(source, dest)           // 拷贝到目标数组
+secureCopyInto(source, dest, dstOffset: 2)
+secureZero(bytes)                      // 安全清零
+```
+
+### CSPRNG 随机数
+
+```cangjie
+import jinguissl_core.crypto.utils.{csprngBytes, csprngIsAvailable, randomSeed}
+
+let available = csprngIsAvailable()     // CSPRNG 是否可用
+let random = csprngBytes(32)            // 生成 32 字节随机数
+let seed = randomSeed(size: 16)         // 安全随机种子
+```
+
