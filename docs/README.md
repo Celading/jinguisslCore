@@ -31,5 +31,15 @@ docs/
 
 ## 示例项目
 
-参见 [sample/](../sample/) 目录下的独立示例项目：每个场景对应一个子目录，
-包含可编译运行的 CangJie 项目，展示各模块的具体用法。
+参见 [sample/](../sample/) 目录下的独立示例项目，包含以下场景：
+
+- 对称密码：**AES**, **ChaCha20**, **SM4**
+- 摘要与派生：**Digest** (MD5/SHA/HMAC/HKDF), **SM3**
+- 非对称密码：**RSA**, **ECC**, **Ed25519**, **X25519**
+- 密钥封装：**KEM** (RSA-KEM, ECDH-KEM)
+- 大数运算：**BigNum** (大整数算术与模运算)
+- 证书合规：**X.509**, **Compliance** (FIPS profile)
+- 协议能力：**TLS** (会话票据), **SSH** (主机密钥指纹)
+- 工具：**Utils** (端序转换、安全比较、CSPRNG)
+
+每个场景对应一个子目录，包含可编译运行的 CangJie 项目。
