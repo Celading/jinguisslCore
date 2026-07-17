@@ -939,7 +939,7 @@ private func loadRsa2048PrivateKey(): RsaPrivateKey {
 }
 
 private func parseKeyValueVectors(path: String): Array<X509KeyValueVector> {
-    let content = readText(path).replace("\r", "\n")
+    let content = readText(path).replace("\r\n", "\n").replace("\r", "\n")
     let lines = content.split('\n')
 
     let vectors = ArrayList<X509KeyValueVector>()
