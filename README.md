@@ -54,11 +54,11 @@ RC4 已不适合作为现代 TLS / HTTPS 的默认兼容方向；如果未来确
 
 ### 依赖
 
-公开仓库默认使用远程 Git 依赖；本地 sibling checkout 仅建议作为开发时的临时覆盖。
+正式消费默认使用仓颉中心仓固定版本；远程 Git 或本地 sibling checkout 仅建议作为开发时的临时覆盖。
 
 ```toml
 [dependencies]
-jinguissl_core = { git = "https://gitcode.com/CjKu/JinguiCore.git" }
+jinguissl_core = "0.7.5"
 ```
 
 ### 示例：Ed25519 签名与验签

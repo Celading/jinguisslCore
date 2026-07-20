@@ -3167,7 +3167,9 @@ private func tls13RequireKeyIvLengths(keyLen: Int64, ivLen: Int64): Unit {
 }
 
 private func tls13RequireTrafficSecret(secret: Array<Byte>, label: String): Unit {
-    _ = tls13HashAlgorithmForHashLen(secret.size)
+    if (secret.size != TLS13_SHA256_HASH_LEN && secret.size != TLS13_SHA384_HASH_LEN) {
+        throw CryptoException(InvalidArgument, "${label} must be SHA-256 or SHA-384 sized")
+    }
 }
 
 private func tls13RequireClientVersion(clientHello: TlsClientHello): Unit {

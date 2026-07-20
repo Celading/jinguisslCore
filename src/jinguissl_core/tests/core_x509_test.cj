@@ -909,7 +909,7 @@ private func makeUnrelatedTrustAnchor(): X509Certificate {
             "unrelated-trust-anchor.local",
             serialNumber: [UInt8(0x7F)],
             notBefore: "220101000000Z",
-            notAfter: "300101000000Z"
+            notAfter: "290101000000Z"
         ),
         EcPrivateKey(P256, BigNum.one())
     )

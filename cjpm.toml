@@ -5,6 +5,11 @@
   output-type = "static"
   src-dir = "src/jinguissl_core"
   compile-option = "-Woff unused"
-  license = "LGPL-3.0-only"
   description = "Cangjie cryptography core with X.509, TLS, and SSH protocol primitives"
-  include = ["src"]
+  repository = "https://gitcode.com/CjKu/JinguiCore"
+  homepage = "https://gitcode.com/CjKu/JinguiCore"
+  documentation = "https://gitcode.com/CjKu/JinguiCore/blob/main/README.md"
+  tag = ["cryptography", "tls", "ssh", "x509", "quic"]
+  category = ["Security", "Network", "Algorithm"]
+  license = ["LGPL-3.0-only"]
+  include = ["src", "sample", "LICENSE"]

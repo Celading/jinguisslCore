@@ -62,7 +62,7 @@ public func tls13HttpClientHelloInteropProfileX25519(
 }
 
 public func tls13HttpClientHelloInteropProfileCloudflareOpenSsl20260701(
-    serverName!: String = "www.cloudflare.com"
+    serverName: String
 ): Tls13ClientHelloInteropProfile {
     Tls13ClientHelloInteropProfile(
         serverName: serverName.trimAscii().toAsciiLower(),
