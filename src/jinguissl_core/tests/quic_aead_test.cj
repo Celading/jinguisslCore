@@ -4,7 +4,7 @@
  import jinguissl_core.crypto.chacha20.{Chacha20Poly1305Context, chacha20Poly1305EncryptWithContext, chacha20Poly1305DecryptWithContext, chacha20Poly1305NewContext}
  import jinguissl_core.crypto.quic.{quicAeadEncrypt, quicAeadDecrypt, quicAeadAesGcmEncrypt, quicAeadAesGcmDecrypt, quicAeadChaCha20Encrypt, quicAeadChaCha20Decrypt, QuicAeadAlgorithm}
  import jinguissl_core.crypto.digest.bytesToHexLower
- import jinguissl_core.crypto.error.CryptoException
+ import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
 
  // ── Test keys ─────────────────────────────────────────────────────
 
@@ -137,6 +137,35 @@
          @Assert(s1 != s2, true)
      }
 
+     @TestCase
+     public func testRfc9001ServerInitialAes128Vector(): Unit {
+         let key = hexToBytes("cf3a5331653c364c88f0f379b6067e37")
+         let iv = hexToBytes("0ac1493ca1905853b0bba03e")
+         let aad = hexToBytes("c1000000010008f067a5502a4262b50040750001")
+         let plaintext = hexToBytes(
+             "02000000000600405a020000560303ee" +
+             "fce7f7b37ba1d1632e96677825ddf739" +
+             "88cfc79825df566dc5430b9a045a1200" +
+             "130100002e00330024001d00209d3c94" +
+             "0d89690b84d08a60993c144eca684d10" +
+             "81287c834d5311bcf32bb9da1a002b00" +
+             "020304"
+         )
+         let expected =
+             "5a482cd0991cd25b0aac406a5816b639" +
+             "4100f37a1c69797554780bb38cc5a99f" +
+             "5ede4cf73c3ec2493a1839b3dbcba3f6" +
+             "ea46c5b7684df3548e7ddeb9c3bf9c73" +
+             "cc3f3bded74b562bfb19fb84022f8ef4" +
+             "cdd93795d77d06edbb7aaf2f58891850" +
+             "abbdca3d20398c276456cbc42158407d" +
+             "d074ee"
+
+         let sealed = quicAeadEncrypt(key, iv, 1, plaintext, aad, QuicAeadAlgorithm.Aes128Gcm)
+         assertHex(sealed, expected)
+         @Assert(quicAeadDecrypt(key, iv, 1, sealed, aad, QuicAeadAlgorithm.Aes128Gcm), plaintext)
+     }
+
      // ── AES-256-GCM ──────────────────────────────────────────────
 
      @TestCase
@@ -256,6 +285,31 @@
          }
      }
 
+     @TestCase
+     public func testRfc9001ChaCha20Poly1305ShortHeaderVector(): Unit {
+         let key = hexToBytes(
+             "c6d98ff3441c3fe1b2182094f69caa2e" +
+             "d4b716b65488960a7a984979fb23e1c8"
+         )
+         let iv = hexToBytes("e0459b3474bdd0e44a41c144")
+         let aad = hexToBytes("4200bff4")
+         let plaintext = hexToBytes("01")
+         let expected = "655e5cd55c41f69080575d7999c25a5bfb"
+
+         let sealed = quicAeadEncrypt(
+             key, iv, 654360564, plaintext, aad,
+             QuicAeadAlgorithm.ChaCha20Poly1305
+         )
+         assertHex(sealed, expected)
+         @Assert(
+             quicAeadDecrypt(
+                 key, iv, 654360564, sealed, aad,
+                 QuicAeadAlgorithm.ChaCha20Poly1305
+             ),
+             plaintext
+         )
+     }
+
      // ── Cross-algorithm ──────────────────────────────────────────
 
      @TestCase
@@ -287,10 +341,94 @@
      }
 
      @TestCase
+     public func testAeadAlgorithmRejectsMismatchedKeyLengthsOnEncrypt(): Unit {
+         let key192 = Array<Byte>(24, repeat: 0x5a)
+
+         assertQuicAeadEncryptRejectsKeyLength(
+             TEST_KEY_256, QuicAeadAlgorithm.Aes128Gcm,
+             "QUIC AES-128-GCM key must be 16 bytes"
+         )
+         assertQuicAeadEncryptRejectsKeyLength(
+             key192, QuicAeadAlgorithm.Aes128Gcm,
+             "QUIC AES-128-GCM key must be 16 bytes"
+         )
+         assertQuicAeadEncryptRejectsKeyLength(
+             TEST_KEY_128, QuicAeadAlgorithm.Aes256Gcm,
+             "QUIC AES-256-GCM key must be 32 bytes"
+         )
+         assertQuicAeadEncryptRejectsKeyLength(
+             key192, QuicAeadAlgorithm.Aes256Gcm,
+             "QUIC AES-256-GCM key must be 32 bytes"
+         )
+         assertQuicAeadEncryptRejectsKeyLength(
+             TEST_KEY_128, QuicAeadAlgorithm.ChaCha20Poly1305,
+             "QUIC ChaCha20-Poly1305 key must be 32 bytes"
+         )
+         assertQuicAeadEncryptRejectsKeyLength(
+             key192, QuicAeadAlgorithm.ChaCha20Poly1305,
+             "QUIC ChaCha20-Poly1305 key must be 32 bytes"
+         )
+     }
+
+     @TestCase
+     public func testAeadAlgorithmRejectsMismatchedKeyLengthsOnDecrypt(): Unit {
+         let key192 = Array<Byte>(24, repeat: 0x5a)
+
+         assertQuicAeadDecryptRejectsKeyLength(
+             TEST_KEY_256, QuicAeadAlgorithm.Aes128Gcm,
+             "QUIC AES-128-GCM key must be 16 bytes"
+         )
+         assertQuicAeadDecryptRejectsKeyLength(
+             key192, QuicAeadAlgorithm.Aes128Gcm,
+             "QUIC AES-128-GCM key must be 16 bytes"
+         )
+         assertQuicAeadDecryptRejectsKeyLength(
+             TEST_KEY_128, QuicAeadAlgorithm.Aes256Gcm,
+             "QUIC AES-256-GCM key must be 32 bytes"
+         )
+         assertQuicAeadDecryptRejectsKeyLength(
+             key192, QuicAeadAlgorithm.Aes256Gcm,
+             "QUIC AES-256-GCM key must be 32 bytes"
+         )
+         assertQuicAeadDecryptRejectsKeyLength(
+             TEST_KEY_128, QuicAeadAlgorithm.ChaCha20Poly1305,
+             "QUIC ChaCha20-Poly1305 key must be 32 bytes"
+         )
+         assertQuicAeadDecryptRejectsKeyLength(
+             key192, QuicAeadAlgorithm.ChaCha20Poly1305,
+             "QUIC ChaCha20-Poly1305 key must be 32 bytes"
+         )
+     }
+
+     @TestCase
      public func testAeadEnumToString(): Unit {
          @Assert(QuicAeadAlgorithm.Aes128Gcm.toString(), "AES-128-GCM")
          @Assert(QuicAeadAlgorithm.Aes256Gcm.toString(), "AES-256-GCM")
          @Assert(QuicAeadAlgorithm.ChaCha20Poly1305.toString(), "ChaCha20-Poly1305")
+     }
+ }
+
+ private func assertQuicAeadEncryptRejectsKeyLength(
+     key: Array<Byte>, alg: QuicAeadAlgorithm, expectedMessage: String
+ ): Unit {
+     try {
+         _ = quicAeadEncrypt(key, TEST_IV, 0, [], [], alg)
+         @Fail("QUIC AEAD encrypt must reject mismatched key length")
+     } catch (e: CryptoException) {
+         @Assert(e.code, CryptoErrorCode.InvalidArgument)
+         @Assert(e.message, expectedMessage)
+     }
+ }
+
+ private func assertQuicAeadDecryptRejectsKeyLength(
+     key: Array<Byte>, alg: QuicAeadAlgorithm, expectedMessage: String
+ ): Unit {
+     try {
+         _ = quicAeadDecrypt(key, TEST_IV, 0, [], [], alg)
+         @Fail("QUIC AEAD decrypt must reject mismatched key length")
+     } catch (e: CryptoException) {
+         @Assert(e.code, CryptoErrorCode.InvalidArgument)
+         @Assert(e.message, expectedMessage)
      }
  }
 

@@ -19,6 +19,17 @@
      }
  }
 
+ private func quicRequireAeadKeyLength(key: Array<Byte>, alg: QuicAeadAlgorithm): Unit {
+     let expected: Int64 = match (alg) {
+         case Aes128Gcm => 16
+         case Aes256Gcm => 32
+         case ChaCha20Poly1305 => 32
+     }
+     if (key.size != expected) {
+         throw CryptoException(InvalidArgument, "QUIC ${alg} key must be ${expected} bytes")
+     }
+ }
+
  // QUIC AEAD nonce construction (RFC 9001 §5.1):
  // nonce = IV XOR (packet_number << (8 * (IV_length - PN_length)))
  // For QUIC: IV=12 bytes, PN=8 bytes, so:
@@ -50,6 +61,7 @@
      plaintext: Array<Byte>, aad: Array<Byte>,
      alg: QuicAeadAlgorithm
  ): Array<Byte> {
+     quicRequireAeadKeyLength(key, alg)
      match (alg) {
          case Aes128Gcm => let ctx = aesNewGcmContext(key)
               quicAeadAesGcmEncrypt(ctx, iv, pn, plaintext, aad)
@@ -67,6 +79,7 @@
      ciphertextWithTag: Array<Byte>, aad: Array<Byte>,
      alg: QuicAeadAlgorithm
  ): Array<Byte> {
+     quicRequireAeadKeyLength(key, alg)
      match (alg) {
          case Aes128Gcm => let ctx = aesNewGcmContext(key)
               quicAeadAesGcmDecrypt(ctx, iv, pn, ciphertextWithTag, aad)
