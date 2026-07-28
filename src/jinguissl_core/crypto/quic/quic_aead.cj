@@ -5,6 +5,20 @@
  import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
  import jinguissl_core.crypto.utils.secureCopyInto
 
+ public enum QuicAeadAlgorithm <: ToString {
+     | Aes128Gcm
+     | Aes256Gcm
+     | ChaCha20Poly1305
+
+     public func toString(): String {
+         match (this) {
+             case Aes128Gcm => "AES-128-GCM"
+             case Aes256Gcm => "AES-256-GCM"
+             case ChaCha20Poly1305 => "ChaCha20-Poly1305"
+         }
+     }
+ }
+
  // QUIC AEAD nonce construction (RFC 9001 §5.1):
  // nonce = IV XOR (packet_number << (8 * (IV_length - PN_length)))
  // For QUIC: IV=12 bytes, PN=8 bytes, so:
@@ -29,33 +43,37 @@
      nonce
  }
 
- /// QUIC AEAD encrypt using AES-GCM.
+ /// QUIC AEAD encrypt.
  /// Returns ciphertext ‖ tag (as on the wire).
  public func quicAeadEncrypt(
      key: Array<Byte>, iv: Array<Byte>, pn: Int64,
-     plaintext: Array<Byte>, aad: Array<Byte>
+     plaintext: Array<Byte>, aad: Array<Byte>,
+     alg: QuicAeadAlgorithm
  ): Array<Byte> {
-     if (key.size == 32) {
-         let ctx = chacha20Poly1305NewContext(key)
-         quicAeadChaCha20Encrypt(ctx, iv, pn, plaintext, aad)
-     } else {
-         let ctx = aesNewGcmContext(key)
-         quicAeadAesGcmEncrypt(ctx, iv, pn, plaintext, aad)
+     match (alg) {
+         case Aes128Gcm => let ctx = aesNewGcmContext(key)
+              quicAeadAesGcmEncrypt(ctx, iv, pn, plaintext, aad)
+         case Aes256Gcm => let ctx = aesNewGcmContext(key)
+              quicAeadAesGcmEncrypt(ctx, iv, pn, plaintext, aad)
+         case ChaCha20Poly1305 => let ctx = chacha20Poly1305NewContext(key)
+              quicAeadChaCha20Encrypt(ctx, iv, pn, plaintext, aad)
      }
  }
 
- /// QUIC AEAD decrypt using AES-GCM or ChaCha20-Poly1305.
+ /// QUIC AEAD decrypt.
  /// Input: ciphertext ‖ tag (as on the wire).
  public func quicAeadDecrypt(
      key: Array<Byte>, iv: Array<Byte>, pn: Int64,
-     ciphertextWithTag: Array<Byte>, aad: Array<Byte>
+     ciphertextWithTag: Array<Byte>, aad: Array<Byte>,
+     alg: QuicAeadAlgorithm
  ): Array<Byte> {
-     if (key.size == 32) {
-         let ctx = chacha20Poly1305NewContext(key)
-         quicAeadChaCha20Decrypt(ctx, iv, pn, ciphertextWithTag, aad)
-     } else {
-         let ctx = aesNewGcmContext(key)
-         quicAeadAesGcmDecrypt(ctx, iv, pn, ciphertextWithTag, aad)
+     match (alg) {
+         case Aes128Gcm => let ctx = aesNewGcmContext(key)
+              quicAeadAesGcmDecrypt(ctx, iv, pn, ciphertextWithTag, aad)
+         case Aes256Gcm => let ctx = aesNewGcmContext(key)
+              quicAeadAesGcmDecrypt(ctx, iv, pn, ciphertextWithTag, aad)
+         case ChaCha20Poly1305 => let ctx = chacha20Poly1305NewContext(key)
+              quicAeadChaCha20Decrypt(ctx, iv, pn, ciphertextWithTag, aad)
      }
  }
 
