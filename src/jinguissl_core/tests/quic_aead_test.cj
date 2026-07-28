@@ -1,7 +1,7 @@
  package jinguissl_core.tests
 
  import jinguissl_core.crypto.aes.{AesGcmContext, aesGcmEncryptWithContext, aesGcmDecryptWithContext, aesNewGcmContext}
- import jinguissl_core.crypto.quic.{quicAeadEncrypt, quicAeadDecrypt, quicAeadAesGcmEncrypt, quicAeadAesGcmDecrypt}
+ import jinguissl_core.crypto.quic.{quicAeadEncrypt, quicAeadDecrypt, quicAeadAesGcmEncrypt, quicAeadAesGcmDecrypt, QuicAeadAlgorithm}
  import jinguissl_core.crypto.digest.bytesToHexLower
  import jinguissl_core.crypto.error.CryptoException
 
@@ -48,16 +48,16 @@
         let pt = "hello quic".toArray()
         let aad = "aad".toArray()
 
-         let sealed = quicAeadEncrypt(TEST_KEY, TEST_IV, 7, pt, aad)
+         let sealed = quicAeadEncrypt(TEST_KEY, TEST_IV, 7, pt, aad, QuicAeadAlgorithm.Aes128Gcm)
          @Assert(sealed.size, pt.size + 16)
 
-         let recovered = quicAeadDecrypt(TEST_KEY, TEST_IV, 7, sealed, aad)
+         let recovered = quicAeadDecrypt(TEST_KEY, TEST_IV, 7, sealed, aad, QuicAeadAlgorithm.Aes128Gcm)
          @Assert(recovered, pt)
 
          // Wrong key must fail
          let badKey = Array<Byte>(16, repeat: 0xab)
          try {
-             _ = quicAeadDecrypt(badKey, TEST_IV, 7, sealed, aad)
+             _ = quicAeadDecrypt(badKey, TEST_IV, 7, sealed, aad, QuicAeadAlgorithm.Aes128Gcm)
              @Fail("AEAD should fail with wrong key")
          } catch (_: CryptoException) {
              @Assert(true)
