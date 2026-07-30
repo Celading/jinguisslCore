@@ -18,7 +18,7 @@ SSH Layer
 │   └── MAC/ETM
 └── Transport Protocol
     ├── Packet framing
-    ├── Compression (deflate)
+    ├── Compression negotiation (no deflate runtime claim)
     └── Rekeying
 ```
 
@@ -47,7 +47,7 @@ KEX 初始化消息。
 
 ### SshHandshakeCoordinator
 
-协调完整的 SSH 握手流程。
+协调库内 SSH 传输握手状态与密钥材料流转。
 
 ### SshHostVerificationConfig / SshHostVerificationPolicy / SshHostVerificationResult
 
@@ -72,3 +72,6 @@ SSH 传输层包保护。
 6. 派生会话密钥
 7. 加密通信
 ```
+
+当前文档描述库内构件与状态流，不代表已经完成外部 OpenSSH client/server
+全流程互操作、用户会话管理或产品级 SSH 服务实现。

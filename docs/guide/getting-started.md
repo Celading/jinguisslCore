@@ -21,26 +21,14 @@ jinguissl_core = { git = "https://gitcode.com/CjKu/JinguiCore.git" }
 jinguissl_core = { path = "../JinguiCore" }
 ```
 
-## 第一个示例
+## 第一个示例：SHA-256
 
 ```cangjie
-import jinguissl_core.crypto.ed25519.*
-import jinguissl_core.crypto.digest.bytesToHexLower
+import jinguissl_core.crypto.digest.{sha256, bytesToHexLower}
 
 main() {
-    // 生成 Ed25519 私钥种子
-    let seed = ed25519GeneratePrivateKeySeed()
-    // 派生公钥
-    let publicKey = ed25519PublicKeyFromSeed(seed)
-    println("Public key: ${bytesToHexLower(publicKey)}")
-
-    // 签名
-    let message = "hello jingui".toArray()
-    let signature = ed25519Sign(seed, message)
-
-    // 验签
-    let valid = ed25519Verify(publicKey, message, signature)
-    println("Signature valid: ${valid}")
+    let digest = sha256("hello jingui".toArray())
+    println(bytesToHexLower(digest))
 }
 ```
 
@@ -53,8 +41,8 @@ cjpm build
 # 运行所有单测
 cjpm test
 
-# 运行示例（参见 sample/ 目录）
-cd sample/ed25519
+# 运行仓内示例（参见 sample/ 目录）
+cd sample/aes
 cjpm build && cjpm run
 ```
 
@@ -76,8 +64,12 @@ cjpm build && cjpm run
 | `jinguissl_core.crypto.x509.*` | X.509 证书 |
 | `jinguissl_core.crypto.tls.*` | TLS 协议 |
 | `jinguissl_core.crypto.ssh.*` | SSH 协议 |
+| `jinguissl_core.crypto.quic.*` | QUIC v1/v2 包保护构件 |
 | `jinguissl_core.crypto.kem.*` | KEM 封装 |
-| `jinguissl_core.crypto.compliance.*` | FIPS 合规 |
+| `jinguissl_core.crypto.compliance.*` | 算法许可与 policy profile |
 | `jinguissl_core.crypto.utils.*` | 工具函数 |
 | `jinguissl_core.crypto.base.*` | 基础类型 |
 | `jinguissl_core.crypto.error.*` | 异常类型 |
+
+不同模块的成熟度并不相同。直接使用私钥算法、TLS/SSH/QUIC 或 KEM 前，
+请先查看 [能力矩阵](../capability-matrix.md) 与对应指南。

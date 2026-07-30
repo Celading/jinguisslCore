@@ -13,8 +13,9 @@ docs/
 │   ├── crypto-primitives.md# 密码原语使用说明
 │   ├── tls-protocol.md     # TLS 1.2/1.3 协议说明
 │   ├── ssh-protocol.md     # SSH 传输层协议说明
-│   ├── x509-certificates.md# X.509 证书处理
-│   └── compliance.md       # FIPS 合规性
+│   ├── x509-certificates.md # X.509 证书处理
+│   ├── quic-protection.md  # QUIC v1/v2 包保护构件
+│   └── compliance.md       # 算法许可与 policy profile
 └── api/
     └── modules.md          # 模块 API 参考
 ```
@@ -26,7 +27,9 @@ docs/
 - [TLS 协议](guide/tls-protocol.md) — TLS 1.2 与 TLS 1.3 握手、记录层、会话管理
 - [SSH 协议](guide/ssh-protocol.md) — SSH 传输层握手、主机验证、密钥交换
 - [X.509 证书](guide/x509-certificates.md) — 证书解析、链验证、PEM/DER
-- [合规性](guide/compliance.md) — FIPS 配置、算法许可管理
+- [QUIC 包保护](guide/quic-protection.md) — Initial、AEAD、Header Protection、Retry integrity
+- [能力矩阵](capability-matrix.md) — 公开能力、证据、手册与限制
+- [算法许可](guide/compliance.md) — FIPS-oriented policy profile 与算法许可管理
 - [API 参考](api/modules.md) — 所有 public API 索引
 
 ## 示例项目
@@ -38,7 +41,8 @@ docs/
 - 非对称密码：**RSA**, **ECC**, **Ed25519**, **X25519**
 - 密钥封装：**KEM** (RSA-KEM, ECDH-KEM)
 - 大数运算：**BigNum** (大整数算术与模运算)
-- 证书合规：**X.509**, **Compliance** (FIPS profile)
+- 证书与策略：**X.509**, **Compliance policy profile**
+- 包保护：**QUIC** (v1/v2 Initial、AEAD、Header Protection、Retry integrity)
 - 协议能力：**TLS** (会话票据), **SSH** (主机密钥指纹)
 - 工具：**Utils** (端序转换、安全比较、CSPRNG)
 

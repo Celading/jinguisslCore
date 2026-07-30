@@ -1,6 +1,8 @@
-# FIPS 合规性配置
+# 算法许可与 FIPS-oriented Policy Profile
 
-`jinguissl_core.crypto.compliance` 提供 FIPS 140 合规性管理。
+`jinguissl_core.crypto.compliance` 提供算法许可、TLS 版本与
+FIPS-oriented profile 检查。它用于组织调用侧策略，不构成 FIPS 140
+密码模块认证、实验室验证或合规证明。
 
 ## FipsProfile
 
@@ -54,7 +56,7 @@ match (version) {
 }
 ```
 
-## 模块级合规
+## 模块级策略检查
 
 各密码模块提供对应的合规检查函数：
 
@@ -76,3 +78,6 @@ ecdhRequireAllowed(profile)
 ecdhKemRequireAllowed(profile)
 rsaKemRequireAllowed(profile)
 ```
+
+这些函数只能证明输入符合当前代码中的 profile 规则。最终算法选择、密钥管理、
+运行环境、模块边界和认证状态仍需由部署方单独核对。
