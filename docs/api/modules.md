@@ -244,6 +244,8 @@ SM4 分组密码（GM/T 0002-2012）。
 
 密钥封装机制。
 
+当前为传统 RSA-KEM/ECDH-KEM 支撑，不是 ML-KEM/PQC 实现。
+
 | API | 说明 |
 |:--|:--|
 | `ecdhKemEncapsulate(pubKey)` | ECDH-KEM 封装 |
@@ -264,6 +266,19 @@ X.509 证书处理（参见 x509 指南文档获取完整 API）。
 - `x509LoadSystemTrustAnchors`
 - `x509CreateSystemTrustPolicy`
 - CRL 解析和验证
+
+## `jinguissl_core.crypto.quic`
+
+QUIC v1/v2 包保护构件。
+
+关键函数和类型：
+- `QuicAeadAlgorithm`
+- `quicInitialSecrets` / `quicInitialKeyIv` / `quicInitialHpKey`
+- `quicAeadEncrypt` / `quicAeadDecrypt`
+- `quicHpAesEncrypt` / `quicHpChaChaEncrypt`
+- `quicRetryIntegrityTag` / `quicVerifyRetryIntegrity`
+
+该模块不实现 QUIC transport、拥塞控制、stream 或 HTTP/3。
 
 ## `jinguissl_core.crypto.tls`
 
@@ -291,7 +306,7 @@ SSH 协议。
 
 ## `jinguissl_core.crypto.compliance`
 
-合规性管理。
+算法许可与 policy profile。它不构成 FIPS 140 模块认证。
 
 | API | 说明 |
 |:--|:--|

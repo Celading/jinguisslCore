@@ -72,7 +72,8 @@ let summary = tls13SummarizeDecodedClientHello(clientHello)
 
 ## TLS 1.2 支持
 
-TLS 1.2 提供完整的握手流，支持 ECDHE 密钥交换和服务端/客户端证书。
+TLS 1.2 提供库内握手流构件，覆盖 ECDHE 密钥交换和服务端/客户端证书相关阶段。
+这不等同于浏览器级 HTTPS、外部实现互操作或完整网络产品证明。
 
 ### 握手状态
 
