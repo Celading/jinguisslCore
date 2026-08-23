@@ -8,6 +8,7 @@ JinguiSSL Core 是 JinguiSSL 系列的底层密码学库，使用仓颉编程语
 ```
 docs/
 ├── README.md              # 本文件 - 目录与快速指引
+├── public-testing.md       # 公开测试入口、结果格式与未覆盖边界
 ├── guide/
 │   ├── getting-started.md  # 快速上手指南
 │   ├── crypto-primitives.md# 密码原语使用说明
@@ -29,6 +30,7 @@ docs/
 - [X.509 证书](guide/x509-certificates.md) — 证书解析、链验证、PEM/DER
 - [QUIC 包保护](guide/quic-protection.md) — Initial、AEAD、Header Protection、Retry integrity
 - [能力矩阵](capability-matrix.md) — 公开能力、证据、手册与限制
+- [公开测试面](public-testing.md) — 权威入口、CI 证据和未覆盖边界
 - [算法许可](guide/compliance.md) — FIPS-oriented policy profile 与算法许可管理
 - [API 参考](api/modules.md) — 所有 public API 索引
 
