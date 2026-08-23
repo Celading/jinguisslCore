@@ -102,4 +102,12 @@ TLS 1.2 Handshake
 - 会话 ID
 - 密码套件协商
 - 密钥计划
-- 会话恢复
+- 有限容量的进程内 session cache
+
+`tlsEncodeSessionTicket` / `tlsDecodeSessionTicket` 是受信任进程内的本地
+序列化构件，会包含 session secret，不能作为网络上的 TLS 1.3 ticket。
+网络 ticket 应是 opaque 数据库索引，或由拥有方自加密且自认证的值。
+当前无密钥 PSK ServerHello、self-describing session-ticket ClientHello /
+NewSessionTicket 和自动 ticket selection 接口均失败关闭；只有显式 PSK 并
+通过 binder 校验的低层路径保留。ticket nonce 派生、ticket age、0-RTT
+anti-replay 与真实互操作仍不在当前能力声明内。

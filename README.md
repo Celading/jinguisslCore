@@ -45,6 +45,11 @@
 
 当前不声明 `X25519MLKEM768` key share，也不把本地 handshake/record 测试写成浏览器、OpenSSL 或 curl 线上互通成功。
 
+PSK 当前只保留调用方显式提供高熵密钥并验证 binder 的低层路径。无密钥的
+PSK 选择和把本地 session 序列化直接当作 wire ticket 的便捷接口会失败关闭；
+在 opaque protected-ticket backend、ticket nonce 派生、ticket age 与 0-RTT
+策略完成前，不声明 TLS 1.3 session-ticket resumption 或 0-RTT 可用。
+
 ### 关于 RC4
 
 RC4 不属于当前维护主线。未来若确有旧系统互通需求，应作为独立的 legacy compatibility 线路评估，不能并入现代默认配置。

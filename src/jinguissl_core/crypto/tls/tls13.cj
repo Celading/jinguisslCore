@@ -786,15 +786,31 @@ public func tls13BuildClientHelloX25519WithCipherSuites(
     tlsEncodeClientHelloHandshake(hello)
 }
 
+/**
+ * Fails closed because a PSK ClientHello cannot carry a valid binder without the PSK.
+ * Use tls13BuildClientHelloPskWithBinder for an externally provisioned PSK.
+ *
+ * @throws CryptoException Unsupported for every otherwise-valid invocation
+ */
 public func tls13BuildClientHelloPsk(
     pskIdentity: Array<Byte>,
     sessionId!: Array<Byte> = []
 ): Array<Byte> {
-    tls13BuildClientHelloPskWithOptionalBinder(pskIdentity, None, sessionId)
+    if (pskIdentity.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 PSK identity must not be empty")
+    }
+    if (sessionId.size > 32) {
+        throw CryptoException(InvalidArgument, "TLS1.3 legacy session id is too long")
+    }
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 PSK ClientHello requires an explicit PSK so its binder can be computed"
+    )
 }
 
 /**
- * tls13BuildClientHelloPskWithBinder.
+ * Builds a PSK ClientHello for an externally provisioned PSK and computes its binder.
+ * This low-level API does not implement TLS session-ticket age handling.
  *
  * @throws CryptoException 当操作失败时抛出
  */
@@ -810,7 +826,8 @@ public func tls13BuildClientHelloPskWithBinder(
 }
 
 /**
- * tls13BuildClientHelloPskWithBinders.
+ * Builds a PSK ClientHello for externally provisioned PSKs and computes their binders.
+ * This low-level API does not implement TLS session-ticket age handling.
  *
  * @throws CryptoException 当操作失败时抛出
  */
@@ -858,16 +875,25 @@ public func tls13BuildClientHelloPskWithBinders(
     tlsEncodeClientHelloHandshake(hello)
 }
 
+/**
+ * Fails closed until an owning protected-ticket backend supplies opaque wire identities.
+ *
+ * @throws CryptoException Unsupported for every invocation
+ */
 public func tls13BuildClientHelloPskFromSessionTicket(
     ticket: TlsSessionTicket,
     sessionId!: Array<Byte> = []
 ): Array<Byte> {
-    let identity = tlsEncodeSessionTicket(ticket)
-    tls13BuildClientHelloPskWithBinder(identity, ticket.secret, sessionId: sessionId)
+    _ = ticket.version
+    _ = sessionId.size
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 session-ticket ClientHello requires an opaque protected ticket backend"
+    )
 }
 
 /**
- * tls13BuildClientHelloPskFromSessionTickets.
+ * Fails closed until an owning protected-ticket backend supplies opaque identities and ages.
  *
  * @throws CryptoException 当操作失败时抛出
  */
@@ -878,48 +904,11 @@ public func tls13BuildClientHelloPskFromSessionTickets(
     if (tickets.size == 0) {
         throw CryptoException(InvalidArgument, "TLS1.3 session ticket list must not be empty")
     }
-    let identities = ArrayList<Array<Byte>>()
-    let psks = ArrayList<Array<Byte>>()
-    for (ticket in tickets) {
-        identities.add(tlsEncodeSessionTicket(ticket))
-        psks.add(ticket.secret.clone())
-    }
-    tls13BuildClientHelloPskWithBinders(identities.toArray(), psks.toArray(), sessionId: sessionId)
-}
-
-private func tls13BuildClientHelloPskWithOptionalBinder(
-    pskIdentity: Array<Byte>,
-    psk: ?Array<Byte>,
-    sessionId: Array<Byte>
-): Array<Byte> {
-    if (pskIdentity.size == 0) {
-        throw CryptoException(InvalidArgument, "TLS1.3 PSK identity must not be empty")
-    }
-
-    let clientRandom = randomSeed(size: TLS_HELLO_RANDOM_LEN)
-    let binders = ArrayList<Array<Byte>>()
-    let identitiesRaw = tls13EncodeClientPskIdentities([pskIdentity], [0])
-    if (let Some(value) <- psk) {
-        let transcriptHash = tls13ComputePskBinderTranscriptHash(clientRandom, identitiesRaw, sessionId)
-        binders.add(tls13ComputePskBinder(value, transcriptHash))
-    } else {
-        binders.add(Array<Byte>(TLS13_HASH_LEN, repeat: 0))
-    }
-    let pskExt = concat(identitiesRaw, tls13EncodeClientPskBinders(binders.toArray()))
-
-    let hello = TlsClientHello(
-        clientRandom,
-        [TLS13_CIPHER_TLS_AES_128_GCM_SHA256],
-        sessionId: sessionId,
-        compressionMethods: [UInt8(0x00)],
-        extensions: [
-            TlsExtension(TLS13_EXT_SUPPORTED_VERSIONS, tls13EncodeClientSupportedVersions()),
-            TlsExtension(TLS13_EXT_PSK_KEY_EXCHANGE_MODES, tls13EncodePskKeyExchangeModes()),
-            TlsExtension(TLS13_EXT_PRE_SHARED_KEY, pskExt)
-        ],
-        legacyVersion: TLS1_2
+    _ = sessionId.size
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 session-ticket ClientHello requires opaque protected tickets and ticket-age metadata"
     )
-    tlsEncodeClientHelloHandshake(hello)
 }
 
 /**
@@ -981,7 +970,8 @@ public func tls13BuildServerHelloForX25519(
 }
 
 /**
- * tls13BuildServerHelloForPsk.
+ * Fails closed because selecting a PSK without the server-owned PSK cannot verify its binder.
+ * Use tls13BuildServerHelloForPskWithBinder with the expected PSK.
  *
  * @throws CryptoException 当操作失败时抛出
  */
@@ -989,9 +979,22 @@ public func tls13BuildServerHelloForPsk(
     encodedClientHello: Array<Byte>,
     selectedIdentityIndex!: Int64 = 0
 ): Array<Byte> {
+    if (encodedClientHello.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 ClientHello must not be empty")
+    }
     if (selectedIdentityIndex < 0 || selectedIdentityIndex > 65535) {
         throw CryptoException(InvalidArgument, "TLS1.3 selected identity index must be uint16")
     }
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 server PSK selection requires an explicit PSK and verified binder"
+    )
+}
+
+private func tls13BuildServerHelloForVerifiedPsk(
+    encodedClientHello: Array<Byte>,
+    selectedIdentityIndex: Int64
+): Array<Byte> {
 
     let clientHello = tlsDecodeClientHelloHandshake(encodedClientHello)
     tls13RequireClientVersion(clientHello)
@@ -1052,7 +1055,7 @@ public func tls13VerifyClientPskBinder(
 }
 
 /**
- * tls13BuildServerHelloForPskWithBinder.
+ * Verifies a PSK binder using a server-owned externally provisioned PSK, then builds ServerHello.
  *
  * @throws CryptoException 当操作失败时抛出
  */
@@ -1069,11 +1072,11 @@ public func tls13BuildServerHelloForPskWithBinder(
     if (!binderOk) {
         throw CryptoException(ParseError, "TLS1.3 PSK binder verification failed")
     }
-    tls13BuildServerHelloForPsk(encodedClientHello, selectedIdentityIndex: selectedIdentityIndex)
+    tls13BuildServerHelloForVerifiedPsk(encodedClientHello, selectedIdentityIndex)
 }
 
 /**
- * tls13BuildServerHelloForPskFromSessionTicket.
+ * Fails closed until an owning protected-ticket backend authenticates the wire ticket.
  *
  * @throws CryptoException 当操作失败时抛出
  */
@@ -1082,20 +1085,16 @@ public func tls13BuildServerHelloForPskFromSessionTicket(
     selectedIdentityIndex!: Int64 = 0,
     nowUnixSeconds!: Int64 = 0
 ): Array<Byte> {
-    let identity = tls13ExtractClientPskIdentity(encodedClientHello, selectedIdentityIndex: selectedIdentityIndex)
-    let ticket = tlsDecodeSessionTicket(identity)
-    let now = if (nowUnixSeconds > 0) {
-        nowUnixSeconds
-    } else {
-        1
+    if (encodedClientHello.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 ClientHello must not be empty")
     }
-    if (ticket.isExpired(now)) {
-        throw CryptoException(ParseError, "TLS1.3 PSK session ticket is expired")
+    if (selectedIdentityIndex < 0 || selectedIdentityIndex > 65535) {
+        throw CryptoException(InvalidArgument, "TLS1.3 selected identity index must be uint16")
     }
-    tls13BuildServerHelloForPskWithBinder(
-        encodedClientHello,
-        ticket.secret,
-        selectedIdentityIndex: selectedIdentityIndex
+    _ = nowUnixSeconds
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 server session resumption requires an opaque protected ticket backend"
     )
 }
 
@@ -1103,14 +1102,13 @@ public func tls13BuildServerHelloForPskBySessionTickets(
     encodedClientHello: Array<Byte>,
     nowUnixSeconds!: Int64 = 0
 ): Array<Byte> {
-    let selectedIdentityIndex = tls13SelectPskIdentityFromSessionTickets(
-        encodedClientHello,
-        nowUnixSeconds: nowUnixSeconds
-    )
-    tls13BuildServerHelloForPskFromSessionTicket(
-        encodedClientHello,
-        selectedIdentityIndex: selectedIdentityIndex,
-        nowUnixSeconds: nowUnixSeconds
+    if (encodedClientHello.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 ClientHello must not be empty")
+    }
+    _ = nowUnixSeconds
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 automatic session-ticket selection requires protected tickets and age validation"
     )
 }
 
@@ -1156,7 +1154,7 @@ public func tls13ExtractClientPskIdentities(encodedClientHello: Array<Byte>): Ar
 }
 
 /**
- * tls13SelectPskIdentityFromSessionTickets.
+ * Fails closed until an owning protected-ticket backend authenticates identities and ages.
  *
  * @throws CryptoException 当操作失败时抛出
  */
@@ -1164,33 +1162,14 @@ public func tls13SelectPskIdentityFromSessionTickets(
     encodedClientHello: Array<Byte>,
     nowUnixSeconds!: Int64 = 0
 ): Int64 {
-    let clientHello = tlsDecodeClientHelloHandshake(encodedClientHello)
-    let pskExt = tls13RequireExtension(clientHello.extensions, TLS13_EXT_PRE_SHARED_KEY, "TLS1.3 client pre_shared_key")
-    let parsed = tls13ParseClientPreSharedKey(pskExt.data)
-    let transcriptHash = tls13ComputePskBinderTranscriptHashFromHello(clientHello, parsed.identitiesRaw)
-    let now = if (nowUnixSeconds > 0) {
-        nowUnixSeconds
-    } else {
-        1
+    if (encodedClientHello.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 ClientHello must not be empty")
     }
-
-    var i = 0
-    while (i < parsed.identities.size) {
-        let ticketOpt = tls13TryDecodeSessionTicket(parsed.identities[i])
-        if (let Some(ticket) <- ticketOpt) {
-            if (!ticket.isExpired(now)) {
-                let expectedBinder = tls13ComputePskBinder(ticket.secret, transcriptHash)
-                let providedBinder = parsed.binders[i]
-                let binderSizesMatch = providedBinder.size == expectedBinder.size
-                let binderBytesMatch = constantTimeEquals(providedBinder, expectedBinder)
-                if (binderSizesMatch && binderBytesMatch) {
-                    return i
-                }
-            }
-        }
-        i += 1
-    }
-    throw CryptoException(ParseError, "TLS1.3 client did not offer a valid session ticket binder")
+    _ = nowUnixSeconds
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 session-ticket identity selection requires protected tickets and age validation"
+    )
 }
 
 /**
@@ -2698,25 +2677,24 @@ public func tls13BuildNewSessionTicketFromSessionTicket(
     ticket: TlsSessionTicket,
     ticketAgeAdd!: Int64 = 0
 ): Array<Byte> {
-    let ticketLifetime = ticket.expiresAtUnixSeconds - ticket.issuedAtUnixSeconds
-    if (ticketLifetime <= 0) {
-        throw CryptoException(InvalidArgument, "TLS1.3 session ticket lifetime must be positive")
-    }
-    let encodedTicket = tlsEncodeSessionTicket(ticket)
-    let message = Tls13NewSessionTicketMessage(
-        ticketLifetime,
-        ticketAgeAdd,
-        ticket.nonce,
-        encodedTicket
+    _ = ticket.version
+    _ = ticketAgeAdd
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 NewSessionTicket requires an opaque protected ticket and nonce-derived PSK"
     )
-    tls13EncodeNewSessionTicketHandshake(message)
 }
 
 public func tls13DecodeSessionTicketFromNewSessionTicket(
     encodedNewSessionTicket: Array<Byte>
 ): TlsSessionTicket {
-    let message = tls13DecodeNewSessionTicketHandshake(encodedNewSessionTicket)
-    tlsDecodeSessionTicket(message.ticket)
+    if (encodedNewSessionTicket.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 NewSessionTicket must not be empty")
+    }
+    throw CryptoException(
+        Unsupported,
+        "TLS1.3 NewSessionTicket requires an owning protected-ticket backend"
+    )
 }
 
 public func tls13CreateClientRecordLayer(
@@ -3890,14 +3868,6 @@ private func tls13ComputePskBinder(psk: Array<Byte>, transcriptHash: Array<Byte>
     let binderKey = tls13DeriveSecret(earlySecret, "res binder", emptyHash)
     let finishedKey = tls13HkdfExpandLabel(binderKey, "finished", [], TLS13_HASH_LEN)
     hmac(HashAlgorithm.SHA256, finishedKey, transcriptHash)
-}
-
-private func tls13TryDecodeSessionTicket(encodedTicket: Array<Byte>): ?TlsSessionTicket {
-    try {
-        Some(tlsDecodeSessionTicket(encodedTicket))
-    } catch (_: CryptoException) {
-        None
-    }
 }
 
 private func tls13HkdfExtract(salt: Array<Byte>, ikm: Array<Byte>): Array<Byte> {
