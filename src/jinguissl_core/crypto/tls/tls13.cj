@@ -635,8 +635,10 @@ public func tls13HandshakeRequireAllowed(
             profile.requireAllowed("ECDH")
             tls13RequireSupportedEcdheCurve(ecdheCurve)
             requireFipsCurve(ecdheCurve)
-        case PSK_1RTT | PSK_0RTT_PLACEHOLDER =>
+        case PSK_1RTT =>
             ()
+        case PSK_0RTT_PLACEHOLDER =>
+            throw CryptoException(Unsupported, "TLS1.3 0-RTT acceptance is disabled")
     }
 }
 

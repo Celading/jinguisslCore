@@ -834,7 +834,12 @@ public class Tls13HandshakeFlowTestSuite {
         let profile = FipsProfile.phase1Default()
         tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.ECDHE_1RTT)
         tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.PSK_1RTT)
-        tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.PSK_0RTT_PLACEHOLDER)
+        try {
+            tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.PSK_0RTT_PLACEHOLDER)
+            @Fail("TLS1.3 0-RTT placeholder must remain disabled")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "UNSUPPORTED")
+        }
 
         let blockedEcdh = FipsProfile.fromText("TLS1.3\nAES-GCM\nRSA")
         try {

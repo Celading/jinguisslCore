@@ -45,10 +45,16 @@
 
 当前不声明 `X25519MLKEM768` key share，也不把本地 handshake/record 测试写成浏览器、OpenSSL 或 curl 线上互通成功。
 
-PSK 当前只保留调用方显式提供高熵密钥并验证 binder 的低层路径。无密钥的
-PSK 选择和把本地 session 序列化直接当作 wire ticket 的便捷接口会失败关闭；
-在 opaque protected-ticket backend、ticket nonce 派生、ticket age 与 0-RTT
-策略完成前，不声明 TLS 1.3 session-ticket resumption 或 0-RTT 可用。
+PSK 除调用方显式提供高熵密钥并验证 binder 的低层路径外，现提供受限的
+单进程 opaque ticket owner：wire ticket 仅为 CSPRNG lookup label，并覆盖
+ticket nonce 派生、age/lifetime 校验、SNI/ALPN/cipher-hash 绑定、binder 验证、
+轮换失效与成功后单次消费。客户端恢复 ClientHello 必须基于已有 PSK+DHE
+key_share 构建；验证结果只是交给后续 key schedule 的安全边界，不是已完成握手。
+
+该 owner 需由调用方串行化访问，不提供跨进程 ticket 共享或 replay 协调。
+当前 binder surface 仅覆盖首个 ClientHello，不接管 HelloRetryRequest transcript。
+0-RTT、完整 resumed-handshake composer、浏览器/OpenSSL/curl 在线互操作仍未开放；
+无密钥 PSK 和把含 secret 的本地 session 序列化当作 wire ticket 继续失败关闭。
 
 ### 关于 RC4
 

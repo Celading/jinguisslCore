@@ -291,9 +291,16 @@ TLS 协议（参见 TLS 指南文档获取完整 API）。
 - 记录层加解密
 - 会话管理
 
-PSK 仅保留显式密钥和 binder 验证路径。`session.cj` 的 ticket 编解码是
-包含 secret 的受信任本地序列化，不是可发送到对端的 TLS 1.3 opaque
-ticket；受保护 ticket backend、ticket age 和 0-RTT 尚未开放。
+PSK 保留显式密钥和 binder 验证路径，并提供受限的单进程
+`Tls13OpaqueTicketStore`。它使用 CSPRNG opaque label、ticket nonce 派生、
+age/lifetime、SNI/ALPN/cipher-hash 绑定、binder、rotation 与成功后单次消费。
+`tls13BuildClientHelloFromResumptionTicket` 要求带 key_share 的 PSK+DHE base
+ClientHello；`validateAndConsumeClientHello` 只返回验证后的 PSK/context，不生成
+ServerHello，也不代表恢复握手完成。调用方负责串行化；跨进程共享、0-RTT、
+HelloRetryRequest transcript、完整 resumed-handshake composer 与外部在线互操作未开放。
+
+`session.cj` 的 ticket 编解码仍是包含 secret 的受信任本地序列化，不可作为
+wire ticket。无密钥 PSK 与 secret-bearing self-describing ticket 便捷路径失败关闭。
 
 ## `jinguissl_core.crypto.ssh`
 
