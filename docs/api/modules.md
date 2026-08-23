@@ -291,6 +291,10 @@ TLS 协议（参见 TLS 指南文档获取完整 API）。
 - 记录层加解密
 - 会话管理
 
+PSK 仅保留显式密钥和 binder 验证路径。`session.cj` 的 ticket 编解码是
+包含 secret 的受信任本地序列化，不是可发送到对端的 TLS 1.3 opaque
+ticket；受保护 ticket backend、ticket age 和 0-RTT 尚未开放。
+
 ## `jinguissl_core.crypto.ssh`
 
 SSH 协议。
