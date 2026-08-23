@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/badge/package-static-2f855a?style=for-the-badge&labelColor=1f2430" alt="Static Package" />
   <img src="https://img.shields.io/badge/focus-crypto%20%2B%20protocol-3182ce?style=for-the-badge&labelColor=1f2430" alt="Crypto and Protocol" />
   <img src="https://img.shields.io/badge/license-LGPL--3.0--only-1f9d55?style=for-the-badge&labelColor=1f2430" alt="LGPL-3.0-only" />
+  <a href="https://github.com/Celading/jinguisslCore/actions/workflows/ci.yml"><img src="https://github.com/Celading/jinguisslCore/actions/workflows/ci.yml/badge.svg" alt="JinguiSSL Package CI" /></a>
 </p>
 <div align="center">
 <span style="font-weight:300;font-size:36px">JinguiSSL Core / 金匮内核</span><br/>
@@ -117,10 +118,16 @@ bash scripts/jinguissl_pre_review.sh <base-ref>
 
 提交前门禁会检查公开残留、托管依赖图、依赖锁、能力矩阵、README/manual 同步、构建和完整测试。
 
+本仓不另造测试 runner 或结果数据库。托管 CI 公开每个 commit 的 step 结果，并上传只含
+commit/工具链、构建日志和完整测试日志的证据 artifact；详见[公开测试面](docs/public-testing.md)。
+Wycheproof、fuzz、恒定时认证和外部协议互操作在真正接入独立 lane 前继续明确标为未覆盖，
+不能只看总测试数推导安全成熟度。
+
 ## 文档
 
 - [使用手册入口](docs/README.md)
 - [能力矩阵](docs/capability-matrix.md)
+- [公开测试面与结果契约](docs/public-testing.md)
 - [密码原语](docs/guide/crypto-primitives.md)
 - [X.509](docs/guide/x509-certificates.md)
 - [TLS](docs/guide/tls-protocol.md)

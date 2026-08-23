@@ -40,7 +40,13 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: git diff --exit-code "$BASE_SHA" -- .github/workflows/ci.yml scripts/jinguissl_ci_audit.sh scripts/jinguissl_capability_gate.py scripts/jinguissl_capability_gate_test.py scripts/jinguissl_pre_review.sh
+        run: |
+          git diff --exit-code "$BASE_SHA" -- \
+            .github/workflows/ci.yml \
+            scripts/jinguissl_ci_audit.sh \
+            scripts/jinguissl_capability_gate.py \
+            scripts/jinguissl_capability_gate_test.py \
+            scripts/jinguissl_pre_review.sh
       - name: Static public-surface audit
         run: bash scripts/jinguissl_ci_audit.sh public .
       - name: Capability and public-document gate
@@ -56,7 +62,7 @@ jobs:
         run: python3 scripts/jinguissl_capability_gate_test.py
 
   package-build-test:
-    name: Package build and test
+    name: Package build and public evidence
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: public-safety-audit
@@ -114,12 +120,35 @@ jobs:
           cjc --version
           cjpm --version
 
+      - name: Prepare public test evidence
+        run: |
+          . "$CANGJIE_HOME/envsetup.sh"
+          mkdir -p target/public-test-evidence
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "runner_os=${RUNNER_OS}"
+            echo "runner_arch=${RUNNER_ARCH}"
+            cjc --version
+            cjpm --version
+          } > target/public-test-evidence/provenance.txt
+
       - name: Build
         run: |
           . "$CANGJIE_HOME/envsetup.sh"
-          cjpm build
+          set -o pipefail
+          cjpm build 2>&1 | tee target/public-test-evidence/build.log
 
       - name: Test
         run: |
           . "$CANGJIE_HOME/envsetup.sh"
-          cjpm test
+          set -o pipefail
+          cjpm test 2>&1 | tee target/public-test-evidence/test.log
+
+      - name: Upload public test evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: jinguissl-public-test-${{ github.sha }}
+          path: target/public-test-evidence
+          if-no-files-found: error
+          retention-days: 30
