@@ -12,8 +12,9 @@ JinguiSSL Core 的国密基础算法栈由仓颉运行时实现，不链接或�
 | SM3 | 一次性与增量摘要、HMAC-SM3、计数 KDF | 标准摘要向量、独立 HMAC/KDF 向量、跨分组测试 |
 | SM4 | block、ECB、CBC、CTR、GCM、CCM | GB/T 模式向量、RFC 8998 GCM/CCM 向量、标签与填充负向测试 |
 
-不在当前范围内：SM9、ZUC、GM-DRBG、TLCP/DTLCP、SM2 X.509/PKCS 集成、
-ASN.1 SM2 密文以及硬件加速。
+RFC 8998 TLS 1.3 profile 已覆盖 curveSM2、SM3 key schedule、SM4-GCM/CCM record、
+sm2sig_sm3 与最小 SM2 X.509 路径。不在当前范围内：SM9、ZUC、GM-DRBG、
+TLCP/DTLCP、ASN.1 SM2 密文、硬件加速和外部 TLS 互操作声明。
 
 ## SM2
 
