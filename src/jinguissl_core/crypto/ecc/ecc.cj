@@ -340,6 +340,17 @@ private func secp256k1Params(): CurveParams {
     )
 }
 
+private func sm2p256v1Params(): CurveParams {
+    CurveParams(
+        BigNum.fromHex("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF"),
+        BigNum.fromHex("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC"),
+        BigNum.fromHex("28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93"),
+        BigNum.fromHex("32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7"),
+        BigNum.fromHex("BC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0"),
+        BigNum.fromHex("FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123")
+    )
+}
+
 private func validateCoordinate(value: BigNum, label: String): Unit {
     if (value.isNegative()) {
         throw CryptoException(InvalidArgument, "EC ${label} must be non-negative")
@@ -587,6 +598,34 @@ public func scalarMulProjective(
     let point = AffinePoint(gx, gy)
     let affineResult = scalarMulProjectivePoint(point, scalar, params)
     (affineResult.x, affineResult.y, affineResult.infinity)
+}
+
+/** @internal - sm2p256v1 projective multiplication hook owned by the SM2 package. */
+public func sm2p256v1ScalarMul(
+    x: BigNum, y: BigNum, scalar: BigNum
+): (BigNum, BigNum, Bool) {
+    let params = sm2p256v1Params()
+    if (!isPointOnCurve(x, y, params)) {
+        throw CryptoException(InvalidArgument, "SM2 point is not on sm2p256v1")
+    }
+    let result = scalarMulProjectivePoint(AffinePoint(x, y), scalar, params)
+    (result.x, result.y, result.infinity)
+}
+
+/** @internal - sm2p256v1 generator multiplication hook owned by the SM2 package. */
+public func sm2p256v1GeneratorMul(scalar: BigNum): (BigNum, BigNum, Bool) {
+    let params = sm2p256v1Params()
+    let result = scalarMulProjectivePoint(AffinePoint(params.gx, params.gy), scalar, params)
+    (result.x, result.y, result.infinity)
+}
+
+/** @internal - sm2p256v1 public-point validation hook owned by the SM2 package. */
+public func sm2p256v1PointOnCurve(x: BigNum, y: BigNum): Bool {
+    let params = sm2p256v1Params()
+    if (x.isNegative() || y.isNegative() || x.cmp(params.p) >= 0 || y.cmp(params.p) >= 0) {
+        return false
+    }
+    isPointOnCurve(x, y, params)
 }
 
 private func scalarMulProjectivePoint(

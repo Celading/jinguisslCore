@@ -24,7 +24,8 @@ docs/
 ## 快速链接
 
 - [快速上手](guide/getting-started.md) — 项目集成、构建配置、首个示例
-- [密码原语](guide/crypto-primitives.md) — AES、ChaCha20、RSA、ECC、Ed25519、X25519、SM3、SM4
+- [密码原语](guide/crypto-primitives.md) — AES、ChaCha20、RSA、ECC、Ed25519、X25519
+- [国密基础算法](guide/gm-crypto.md) — SM2、SM3、SM4 的 API、编码和安全边界
 - [TLS 协议](guide/tls-protocol.md) — TLS 1.2 与 TLS 1.3 握手、记录层、会话管理
 - [SSH 协议](guide/ssh-protocol.md) — SSH 传输层握手、主机验证、密钥交换
 - [X.509 证书](guide/x509-certificates.md) — 证书解析、链验证、PEM/DER
@@ -38,9 +39,9 @@ docs/
 
 参见 [sample/](../sample/) 目录下的独立示例项目，包含以下场景：
 
-- 对称密码：**AES**, **ChaCha20**, **SM4**
-- 摘要与派生：**Digest** (MD5/SHA/HMAC/HKDF), **SM3**
-- 非对称密码：**RSA**, **ECC**, **Ed25519**, **X25519**
+- 对称密码：**AES**, **ChaCha20**, **SM4** (ECB/CBC/CTR/GCM/CCM)
+- 摘要与派生：**Digest** (MD5/SHA/HMAC/HKDF), **SM3** (stream/HMAC/KDF)
+- 非对称密码：**RSA**, **ECC**, **Ed25519**, **X25519**, **SM2**
 - 密钥封装：**KEM** (RSA-KEM, ECDH-KEM)
 - 大数运算：**BigNum** (大整数算术与模运算)
 - 证书与策略：**X.509**, **Compliance policy profile**
