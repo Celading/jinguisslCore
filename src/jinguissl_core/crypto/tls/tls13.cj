@@ -4,10 +4,11 @@ import std.collection.ArrayList
 import jinguissl_core.crypto.aes.{AesEngineKind}
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.compliance.{FipsProfile}
-import jinguissl_core.crypto.digest.{hmac, sha256, sha384, HashAlgorithm}
+import jinguissl_core.crypto.digest.{hash, hmac, sha256, sha384, HashAlgorithm}
 import jinguissl_core.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecdhDeriveSharedSecret, requireFipsCurve}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.crypto.rsa.RsaPrivateKey
+import jinguissl_core.crypto.sm2.{Sm2PrivateKey, Sm2PublicKey, sm2EcdhSharedSecret, sm2PublicKeyFromUncompressed, sm2PublicKeyToUncompressed}
 import jinguissl_core.crypto.utils.{constantTimeEquals, randomSeed, secureCopyInto}
 import jinguissl_core.crypto.x25519.{X25519_KEY_LEN, x25519DeriveSharedSecret, x25519ValidatePublicKey}
 import jinguissl_core.crypto.x509.{X509Certificate, X509VerificationPolicy, X509VerificationResult, x509ExtractEcPublicKey, x509ExtractRsaPublicKey, x509ParseDer, x509VerifyCertificateChain, x509VerifyCertificateChainWithProfile}
@@ -43,6 +44,7 @@ public enum Tls13HandshakeMode <: Equatable<Tls13HandshakeMode> & ToString {
 }
 
 public class Tls13HandshakeSecrets {
+    public let hashAlgorithm: HashAlgorithm
     public let earlySecret: Array<Byte>
     public let handshakeSecret: Array<Byte>
     public let masterSecret: Array<Byte>
@@ -68,8 +70,10 @@ public class Tls13HandshakeSecrets {
         clientWriteKey: Array<Byte>,
         serverWriteKey: Array<Byte>,
         clientWriteIv: Array<Byte>,
-        serverWriteIv: Array<Byte>
+        serverWriteIv: Array<Byte>,
+        hashAlgorithm!: HashAlgorithm = HashAlgorithm.SHA256
     ) {
+        this.hashAlgorithm = hashAlgorithm
         this.earlySecret = earlySecret.clone()
         this.handshakeSecret = handshakeSecret.clone()
         this.masterSecret = masterSecret.clone()
@@ -214,17 +218,22 @@ public class Tls13RecordLayerHandle {
     public let algorithm: TlsAeadAlgorithm
     let _aesLayer: ?TlsAeadRecordLayer
     let _chachaLayer: ?TlsChacha20Poly1305RecordLayer
+    let _sm4Layer: ?TlsSm4RecordLayer
 
     public init(
         algorithm: TlsAeadAlgorithm,
         aesLayer!: ?TlsAeadRecordLayer = None,
-        chachaLayer!: ?TlsChacha20Poly1305RecordLayer = None
+        chachaLayer!: ?TlsChacha20Poly1305RecordLayer = None,
+        sm4Layer!: ?TlsSm4RecordLayer = None
     ) {
         match (algorithm) {
             case AES_GCM =>
                 if (let Some(_layer) <- aesLayer) {
                     if (let Some(_unexpected) <- chachaLayer) {
                         throw CryptoException(InvalidArgument, "TLS1.3 AES record handle must not carry ChaCha layer")
+                    }
+                    if (let Some(_unexpected) <- sm4Layer) {
+                        throw CryptoException(InvalidArgument, "TLS1.3 AES record handle must not carry SM4 layer")
                     }
                 } else {
                     throw CryptoException(InvalidArgument, "TLS1.3 AES record handle requires AES layer")
@@ -234,13 +243,31 @@ public class Tls13RecordLayerHandle {
                     if (let Some(_unexpected) <- aesLayer) {
                         throw CryptoException(InvalidArgument, "TLS1.3 ChaCha record handle must not carry AES layer")
                     }
+                    if (let Some(_unexpected) <- sm4Layer) {
+                        throw CryptoException(InvalidArgument, "TLS1.3 ChaCha record handle must not carry SM4 layer")
+                    }
                 } else {
                     throw CryptoException(InvalidArgument, "TLS1.3 ChaCha record handle requires ChaCha layer")
+                }
+            case SM4_GCM | SM4_CCM =>
+                if (let Some(layer) <- sm4Layer) {
+                    if (layer.algorithm != algorithm) {
+                        throw CryptoException(InvalidArgument, "TLS1.3 SM4 record handle algorithm mismatch")
+                    }
+                    if (let Some(_unexpected) <- aesLayer) {
+                        throw CryptoException(InvalidArgument, "TLS1.3 SM4 record handle must not carry AES layer")
+                    }
+                    if (let Some(_unexpected) <- chachaLayer) {
+                        throw CryptoException(InvalidArgument, "TLS1.3 SM4 record handle must not carry ChaCha layer")
+                    }
+                } else {
+                    throw CryptoException(InvalidArgument, "TLS1.3 SM4 record handle requires SM4 layer")
                 }
         }
         this.algorithm = algorithm
         this._aesLayer = aesLayer
         this._chachaLayer = chachaLayer
+        this._sm4Layer = sm4Layer
     }
 
     /**
@@ -260,6 +287,11 @@ public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byt
                     return layer.seal(contentType, plaintext)
                 }
                 throw CryptoException(InvalidArgument, "TLS1.3 ChaCha record layer is unavailable")
+            case SM4_GCM | SM4_CCM =>
+                if (let Some(layer) <- _sm4Layer) {
+                    return layer.seal(contentType, plaintext)
+                }
+                throw CryptoException(InvalidArgument, "TLS1.3 SM4 record layer is unavailable")
         }
     }
 
@@ -280,6 +312,11 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
                     return layer.open(encodedRecord)
                 }
                 throw CryptoException(InvalidArgument, "TLS1.3 ChaCha record layer is unavailable")
+            case SM4_GCM | SM4_CCM =>
+                if (let Some(layer) <- _sm4Layer) {
+                    return layer.open(encodedRecord)
+                }
+                throw CryptoException(InvalidArgument, "TLS1.3 SM4 record layer is unavailable")
         }
     }
 
@@ -302,6 +339,12 @@ public func resetSequences(): Unit {
                     return
                 }
                 throw CryptoException(InvalidArgument, "TLS1.3 ChaCha record layer is unavailable")
+            case SM4_GCM | SM4_CCM =>
+                if (let Some(layer) <- _sm4Layer) {
+                    layer.resetSequences()
+                    return
+                }
+                throw CryptoException(InvalidArgument, "TLS1.3 SM4 record layer is unavailable")
         }
     }
 }
@@ -604,9 +647,14 @@ public let TLS13_MAX_TICKET_LIFETIME_SECONDS: Int64 = 0xffff_ffff
 public let TLS13_CIPHER_SUITE_AES_128_GCM_SHA256: Int64 = 0x1301
 public let TLS13_CIPHER_SUITE_AES_256_GCM_SHA384: Int64 = 0x1302
 public let TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256: Int64 = 0x1303
+public let TLS13_CIPHER_SUITE_SM4_GCM_SM3: Int64 = 0x00c6
+public let TLS13_CIPHER_SUITE_SM4_CCM_SM3: Int64 = 0x00c7
+public let TLS13_SIG_SCHEME_SM2_SM3: Int64 = 0x0708
+public let TLS13_GROUP_CURVE_SM2: Int64 = 41
 
 private let TLS13_VERSION: Int64 = 0x0304
 private let TLS13_EXT_SUPPORTED_GROUPS: Int64 = 0x000a
+private let TLS13_EXT_SIGNATURE_ALGORITHMS_CERT: Int64 = 0x0032
 private let TLS13_EXT_SUPPORTED_VERSIONS: Int64 = 0x002b
 private let TLS13_EXT_KEY_SHARE: Int64 = 0x0033
 private let TLS13_EXT_PSK_KEY_EXCHANGE_MODES: Int64 = 0x002d
@@ -657,6 +705,12 @@ public func tls13CipherSuiteAeadAlgorithm(cipherSuite: Int64): TlsAeadAlgorithm 
     if (cipherSuite == TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256) {
         return CHACHA20_POLY1305
     }
+    if (cipherSuite == TLS13_CIPHER_SUITE_SM4_GCM_SM3) {
+        return SM4_GCM
+    }
+    if (cipherSuite == TLS13_CIPHER_SUITE_SM4_CCM_SM3) {
+        return SM4_CCM
+    }
     throw CryptoException(Unsupported, "TLS1.3 cipher suite is unsupported: ${cipherSuite}")
 }
 
@@ -675,6 +729,12 @@ public func tls13CipherSuiteKeyLen(cipherSuite: Int64): Int64 {
     if (cipherSuite == TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256) {
         return 32
     }
+    if (
+        cipherSuite == TLS13_CIPHER_SUITE_SM4_GCM_SM3 ||
+        cipherSuite == TLS13_CIPHER_SUITE_SM4_CCM_SM3
+    ) {
+        return 16
+    }
     throw CryptoException(Unsupported, "TLS1.3 cipher suite key length is unsupported: ${cipherSuite}")
 }
 
@@ -692,6 +752,12 @@ public func tls13CipherSuiteHashAlgorithm(cipherSuite: Int64): HashAlgorithm {
         cipherSuite == TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256
     ) {
         return HashAlgorithm.SHA256
+    }
+    if (
+        cipherSuite == TLS13_CIPHER_SUITE_SM4_GCM_SM3 ||
+        cipherSuite == TLS13_CIPHER_SUITE_SM4_CCM_SM3
+    ) {
+        return HashAlgorithm.SM3
     }
     throw CryptoException(Unsupported, "TLS1.3 cipher suite hash is unsupported: ${cipherSuite}")
 }
@@ -782,6 +848,31 @@ public func tls13BuildClientHelloX25519WithCipherSuites(
             tls13EncodeSupportedGroupsExtension([TLS13_GROUP_X25519]),
             tls13EncodeSignatureAlgorithmsExtension(tls13DefaultClientSignatureSchemes()),
             TlsExtension(TLS13_EXT_KEY_SHARE, tls13EncodeClientX25519KeyShare(clientKeyShare))
+        ],
+        legacyVersion: TLS1_2
+    )
+    tlsEncodeClientHelloHandshake(hello)
+}
+
+/** Build the RFC 8998 ClientHello profile for a curveSM2 key share. */
+public func tls13BuildClientHelloSm2(
+    clientKeyShare: Sm2PublicKey,
+    cipherSuites!: Array<Int64> = [TLS13_CIPHER_SUITE_SM4_GCM_SM3, TLS13_CIPHER_SUITE_SM4_CCM_SM3],
+    sessionId!: Array<Byte> = []
+): Array<Byte> {
+    tls13ValidateSmCipherSuites(cipherSuites)
+    let signatureAlgorithms = tls13EncodeSignatureAlgorithmsExtension([TLS13_SIG_SCHEME_SM2_SM3])
+    let hello = TlsClientHello(
+        randomSeed(size: TLS_HELLO_RANDOM_LEN),
+        cipherSuites,
+        sessionId: sessionId,
+        compressionMethods: [UInt8(0x00)],
+        extensions: [
+            TlsExtension(TLS13_EXT_SUPPORTED_VERSIONS, tls13EncodeClientSupportedVersions()),
+            tls13EncodeSupportedGroupsExtension([TLS13_GROUP_CURVE_SM2]),
+            signatureAlgorithms,
+            TlsExtension(TLS13_EXT_SIGNATURE_ALGORITHMS_CERT, signatureAlgorithms.data),
+            TlsExtension(TLS13_EXT_KEY_SHARE, tls13EncodeClientSm2KeyShare(clientKeyShare))
         ],
         legacyVersion: TLS1_2
     )
@@ -965,6 +1056,31 @@ public func tls13BuildServerHelloForX25519(
         extensions: [
             TlsExtension(TLS13_EXT_SUPPORTED_VERSIONS, tls13EncodeServerSupportedVersion()),
             TlsExtension(TLS13_EXT_KEY_SHARE, tls13EncodeServerX25519KeyShare(serverKeyShare))
+        ],
+        legacyVersion: TLS1_2
+    )
+    tlsEncodeServerHelloHandshake(hello)
+}
+
+/** Build an RFC 8998 ServerHello after validating the client's GM profile offer. */
+public func tls13BuildServerHelloForSm2(
+    encodedClientHello: Array<Byte>,
+    serverKeyShare: Sm2PublicKey
+): Array<Byte> {
+    let clientHello = tlsDecodeClientHelloHandshake(encodedClientHello)
+    tls13RequireClientVersion(clientHello)
+    tls13RequireSmClientProfile(clientHello)
+    let selectedCipher = tls13SelectSmCipherSuite(clientHello.cipherSuites)
+    _ = tls13ExtractClientSm2KeyShareFromHello(clientHello)
+
+    let hello = TlsServerHello(
+        randomSeed(size: TLS_HELLO_RANDOM_LEN),
+        selectedCipher,
+        sessionId: clientHello.sessionId,
+        compressionMethod: UInt8(0x00),
+        extensions: [
+            TlsExtension(TLS13_EXT_SUPPORTED_VERSIONS, tls13EncodeServerSupportedVersion()),
+            TlsExtension(TLS13_EXT_KEY_SHARE, tls13EncodeServerSm2KeyShare(serverKeyShare))
         ],
         legacyVersion: TLS1_2
     )
@@ -1198,6 +1314,11 @@ public func tls13ExtractClientX25519KeyShare(encodedClientHello: Array<Byte>): A
     tls13ExtractClientX25519KeyShareFromHello(clientHello)
 }
 
+public func tls13ExtractClientSm2KeyShare(encodedClientHello: Array<Byte>): Sm2PublicKey {
+    let clientHello = tlsDecodeClientHelloHandshake(encodedClientHello)
+    tls13ExtractClientSm2KeyShareFromHello(clientHello)
+}
+
 public func tls13ExtractServerKeyShare(encodedServerHello: Array<Byte>): EcPublicKey {
     let serverHello = tlsDecodeServerHelloHandshake(encodedServerHello)
     let ext = tls13RequireExtension(serverHello.extensions, TLS13_EXT_KEY_SHARE, "TLS1.3 server key_share")
@@ -1208,6 +1329,12 @@ public func tls13ExtractServerX25519KeyShare(encodedServerHello: Array<Byte>): A
     let serverHello = tlsDecodeServerHelloHandshake(encodedServerHello)
     let ext = tls13RequireExtension(serverHello.extensions, TLS13_EXT_KEY_SHARE, "TLS1.3 server key_share")
     tls13DecodeServerX25519KeyShare(ext.data)
+}
+
+public func tls13ExtractServerSm2KeyShare(encodedServerHello: Array<Byte>): Sm2PublicKey {
+    let serverHello = tlsDecodeServerHelloHandshake(encodedServerHello)
+    let ext = tls13RequireExtension(serverHello.extensions, TLS13_EXT_KEY_SHARE, "TLS1.3 server key_share")
+    tls13DecodeServerSm2KeyShare(ext.data)
 }
 
 public func tls13BuildCertificateHandshakeFromDerChain(
@@ -2245,13 +2372,38 @@ public func tls13DeriveSecretsFromEcdheForCipherSuite(
     if (appTranscriptHash.size > 0) {
         tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
     }
-    tls13DeriveSecretsFromEcdhe(
-        privateKey,
-        peerPublicKey,
+    if (privateKey.curve != peerPublicKey.curve) {
+        throw CryptoException(InvalidArgument, "TLS1.3 ECDHE key curve mismatch")
+    }
+    tls13RequireSupportedEcdheCurve(privateKey.curve)
+    tls13DeriveSecretsFromSharedSecret(
+        ecdhDeriveSharedSecret(privateKey, peerPublicKey),
         transcriptHash,
-        appTranscriptHash: appTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        keyLen,
+        ivLen,
+        hashAlgorithm,
+        appTranscriptHash: appTranscriptHash
+    )
+}
+
+/** Derive an RFC 8998 TLS 1.3 key schedule from the curveSM2 ECDHE x-coordinate. */
+public func tls13DeriveSecretsFromSm2ForCipherSuite(
+    privateKey: Sm2PrivateKey,
+    peerPublicKey: Sm2PublicKey,
+    transcriptHash: Array<Byte>,
+    cipherSuite: Int64,
+    appTranscriptHash!: Array<Byte> = []
+): Tls13HandshakeSecrets {
+    tls13RequireSmCipherSuite(cipherSuite)
+    let hashAlgorithm = tls13CipherSuiteHashAlgorithm(cipherSuite)
+    let (keyLen, ivLen) = tls13KeyIvLensFromCipherSuite(cipherSuite)
+    tls13DeriveSecretsFromSharedSecret(
+        sm2EcdhSharedSecret(privateKey, peerPublicKey),
+        transcriptHash,
+        keyLen,
+        ivLen,
+        hashAlgorithm,
+        appTranscriptHash: appTranscriptHash
     )
 }
 
@@ -2298,13 +2450,13 @@ public func tls13DeriveSecretsFromX25519ForCipherSuite(
     if (appTranscriptHash.size > 0) {
         tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
     }
-    tls13DeriveSecretsFromX25519(
-        privateKey,
-        peerPublicKey,
+    tls13DeriveSecretsFromSharedSecret(
+        x25519DeriveSharedSecret(privateKey, peerPublicKey),
         transcriptHash,
-        appTranscriptHash: appTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        keyLen,
+        ivLen,
+        hashAlgorithm,
+        appTranscriptHash: appTranscriptHash
     )
 }
 
@@ -2355,12 +2507,23 @@ public func tls13DeriveSecretsFromPskForCipherSuite(
     if (appTranscriptHash.size > 0) {
         tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
     }
-    tls13DeriveSecretsFromPsk(
-        psk,
+    if (psk.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 PSK must not be empty")
+    }
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
+    let zeros = Array<Byte>(hashLen, repeat: 0)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
+    let earlySecret = tls13HkdfExtractWithHash(hashAlgorithm, zeros, psk)
+    let derivedEarly = tls13DeriveSecretWithHash(hashAlgorithm, earlySecret, "derived", emptyHash)
+    let handshakeSecret = tls13HkdfExtractWithHash(hashAlgorithm, derivedEarly, zeros)
+    tls13BuildSecretsFromStages(
+        earlySecret,
+        handshakeSecret,
         transcriptHash,
+        keyLen,
+        ivLen,
         appTranscriptHash: appTranscriptHash,
-        keyLen: keyLen,
-        ivLen: ivLen
+        hashAlgorithm: hashAlgorithm
     )
 }
 
@@ -2448,6 +2611,19 @@ public func tls13ComputeFinishedVerifyData(baseTrafficSecret: Array<Byte>, trans
     hmac(hashAlgorithm, finishedKey, transcriptHash)
 }
 
+public func tls13ComputeFinishedVerifyDataForCipherSuite(
+    baseTrafficSecret: Array<Byte>,
+    transcriptHash: Array<Byte>,
+    cipherSuite: Int64
+): Array<Byte> {
+    let hashAlgorithm = tls13CipherSuiteHashAlgorithm(cipherSuite)
+    tls13RequireHashLengthForAlgorithm(baseTrafficSecret, hashAlgorithm, "TLS1.3 finished base secret")
+    tls13RequireHashLengthForAlgorithm(transcriptHash, hashAlgorithm, "TLS1.3 transcript hash")
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
+    let finishedKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, baseTrafficSecret, "finished", [], hashLen)
+    hmac(hashAlgorithm, finishedKey, transcriptHash)
+}
+
 public func tls13BuildKeyUpdateHandshake(requestPeerUpdate!: Bool = false): Array<Byte> {
     let requestValue = if (requestPeerUpdate) {
         TLS13_KEY_UPDATE_REQUESTED
@@ -2489,6 +2665,20 @@ public func tls13DeriveNextApplicationTrafficSecret(currentTrafficSecret: Array<
     )
 }
 
+public func tls13DeriveNextApplicationTrafficSecretWithHash(
+    currentTrafficSecret: Array<Byte>,
+    hashAlgorithm: HashAlgorithm
+): Array<Byte> {
+    tls13RequireHashLengthForAlgorithm(currentTrafficSecret, hashAlgorithm, "TLS1.3 application traffic secret")
+    tls13HkdfExpandLabelWithHash(
+        hashAlgorithm,
+        currentTrafficSecret,
+        "traffic upd",
+        [],
+        tls13HashLenForAlgorithm(hashAlgorithm)
+    )
+}
+
 public func tls13DeriveApplicationTrafficKeyIv(
     applicationTrafficSecret: Array<Byte>,
     keyLen!: Int64 = TLS13_DEFAULT_AEAD_KEY_LEN,
@@ -2514,7 +2704,10 @@ public func tls13RotateClientApplicationTrafficSecrets(secrets: Tls13HandshakeSe
     if (secrets.serverWriteKey.size != keyLen || secrets.serverWriteIv.size != ivLen) {
         throw CryptoException(InvalidArgument, "TLS1.3 client/server key material lengths must match")
     }
-    let nextClientTraffic = tls13DeriveNextApplicationTrafficSecret(secrets.clientAppTrafficSecret)
+    let nextClientTraffic = tls13DeriveNextApplicationTrafficSecretWithHash(
+        secrets.clientAppTrafficSecret,
+        secrets.hashAlgorithm
+    )
     tls13CloneWithTrafficSecrets(
         secrets,
         nextClientTraffic,
@@ -2535,7 +2728,10 @@ public func tls13RotateServerApplicationTrafficSecrets(secrets: Tls13HandshakeSe
     if (secrets.clientWriteKey.size != keyLen || secrets.clientWriteIv.size != ivLen) {
         throw CryptoException(InvalidArgument, "TLS1.3 client/server key material lengths must match")
     }
-    let nextServerTraffic = tls13DeriveNextApplicationTrafficSecret(secrets.serverAppTrafficSecret)
+    let nextServerTraffic = tls13DeriveNextApplicationTrafficSecretWithHash(
+        secrets.serverAppTrafficSecret,
+        secrets.hashAlgorithm
+    )
     tls13CloneWithTrafficSecrets(
         secrets,
         secrets.clientAppTrafficSecret,
@@ -2727,6 +2923,32 @@ public func tls13CreateServerRecordLayer(
     )
 }
 
+public func tls13CreateClientRecordLayerSm4(
+    secrets: Tls13HandshakeSecrets,
+    algorithm: TlsAeadAlgorithm
+): TlsSm4RecordLayer {
+    TlsSm4RecordLayer(
+        algorithm,
+        secrets.clientWriteKey,
+        secrets.clientWriteIv,
+        readKey: secrets.serverWriteKey,
+        readIv: secrets.serverWriteIv
+    )
+}
+
+public func tls13CreateServerRecordLayerSm4(
+    secrets: Tls13HandshakeSecrets,
+    algorithm: TlsAeadAlgorithm
+): TlsSm4RecordLayer {
+    TlsSm4RecordLayer(
+        algorithm,
+        secrets.serverWriteKey,
+        secrets.serverWriteIv,
+        readKey: secrets.clientWriteKey,
+        readIv: secrets.clientWriteIv
+    )
+}
+
 public func tls13CreateClientRecordLayerHandle(
     secrets: Tls13HandshakeSecrets,
     cipherSuite: Int64,
@@ -2743,6 +2965,11 @@ public func tls13CreateClientRecordLayerHandle(
             return Tls13RecordLayerHandle(
                 CHACHA20_POLY1305,
                 chachaLayer: Some(tls13CreateClientRecordLayerChacha20Poly1305(secrets))
+            )
+        case SM4_GCM | SM4_CCM =>
+            return Tls13RecordLayerHandle(
+                algorithm,
+                sm4Layer: Some(tls13CreateClientRecordLayerSm4(secrets, algorithm))
             )
     }
 }
@@ -2763,6 +2990,11 @@ public func tls13CreateServerRecordLayerHandle(
             return Tls13RecordLayerHandle(
                 CHACHA20_POLY1305,
                 chachaLayer: Some(tls13CreateServerRecordLayerChacha20Poly1305(secrets))
+            )
+        case SM4_GCM | SM4_CCM =>
+            return Tls13RecordLayerHandle(
+                algorithm,
+                sm4Layer: Some(tls13CreateServerRecordLayerSm4(secrets, algorithm))
             )
     }
 }
@@ -2862,6 +3094,10 @@ public func tls13RotateClientRecordLayerHandle(
         case CHACHA20_POLY1305 =>
             let (rotated, layer) = tls13RotateClientRecordLayerChacha20Poly1305(secrets)
             return (rotated, Tls13RecordLayerHandle(CHACHA20_POLY1305, chachaLayer: Some(layer)))
+        case SM4_GCM | SM4_CCM =>
+            let rotated = tls13RotateClientApplicationTrafficSecrets(secrets)
+            let layer = tls13CreateClientRecordLayerSm4(rotated, algorithm)
+            return (rotated, Tls13RecordLayerHandle(algorithm, sm4Layer: Some(layer)))
     }
 }
 
@@ -2878,6 +3114,10 @@ public func tls13RotateServerRecordLayerHandle(
         case CHACHA20_POLY1305 =>
             let (rotated, layer) = tls13RotateServerRecordLayerChacha20Poly1305(secrets)
             return (rotated, Tls13RecordLayerHandle(CHACHA20_POLY1305, chachaLayer: Some(layer)))
+        case SM4_GCM | SM4_CCM =>
+            let rotated = tls13RotateServerApplicationTrafficSecrets(secrets)
+            let layer = tls13CreateServerRecordLayerSm4(rotated, algorithm)
+            return (rotated, Tls13RecordLayerHandle(algorithm, sm4Layer: Some(layer)))
     }
 }
 
@@ -3026,7 +3266,41 @@ private func tls13BuildSecretsFromStages(
         clientWriteKey,
         serverWriteKey,
         clientWriteIv,
-        serverWriteIv
+        serverWriteIv,
+        hashAlgorithm: hashAlgorithm
+    )
+}
+
+private func tls13DeriveSecretsFromSharedSecret(
+    sharedSecret: Array<Byte>,
+    transcriptHash: Array<Byte>,
+    keyLen: Int64,
+    ivLen: Int64,
+    hashAlgorithm: HashAlgorithm,
+    appTranscriptHash!: Array<Byte> = []
+): Tls13HandshakeSecrets {
+    if (sharedSecret.size == 0) {
+        throw CryptoException(InvalidArgument, "TLS1.3 shared secret must not be empty")
+    }
+    tls13RequireKeyIvLengths(keyLen, ivLen)
+    tls13RequireHashLengthForAlgorithm(transcriptHash, hashAlgorithm, "TLS1.3 transcript hash")
+    if (appTranscriptHash.size > 0) {
+        tls13RequireHashLengthForAlgorithm(appTranscriptHash, hashAlgorithm, "TLS1.3 application transcript hash")
+    }
+    let hashLen = tls13HashLenForAlgorithm(hashAlgorithm)
+    let zeros = Array<Byte>(hashLen, repeat: 0)
+    let emptyHash = tls13HashWithAlgorithm(hashAlgorithm, [])
+    let earlySecret = tls13HkdfExtractWithHash(hashAlgorithm, zeros, zeros)
+    let derivedEarly = tls13DeriveSecretWithHash(hashAlgorithm, earlySecret, "derived", emptyHash)
+    let handshakeSecret = tls13HkdfExtractWithHash(hashAlgorithm, derivedEarly, sharedSecret)
+    tls13BuildSecretsFromStages(
+        earlySecret,
+        handshakeSecret,
+        transcriptHash,
+        keyLen,
+        ivLen,
+        appTranscriptHash: appTranscriptHash,
+        hashAlgorithm: hashAlgorithm
     )
 }
 
@@ -3040,7 +3314,8 @@ private func tls13CloneWithTrafficSecrets(
     tls13RequireTrafficSecret(clientAppTrafficSecret, "TLS1.3 client application traffic secret")
     tls13RequireTrafficSecret(serverAppTrafficSecret, "TLS1.3 server application traffic secret")
     tls13RequireKeyIvLengths(keyLen, ivLen)
-    let hashAlgorithm = tls13HashAlgorithmForHashLen(clientAppTrafficSecret.size)
+    let hashAlgorithm = base.hashAlgorithm
+    tls13RequireHashLengthForAlgorithm(clientAppTrafficSecret, hashAlgorithm, "TLS1.3 client application traffic secret")
     tls13RequireHashLengthForAlgorithm(serverAppTrafficSecret, hashAlgorithm, "TLS1.3 server application traffic secret")
 
     let clientWriteKey = tls13HkdfExpandLabelWithHash(hashAlgorithm, clientAppTrafficSecret, "key", [], keyLen)
@@ -3059,7 +3334,8 @@ private func tls13CloneWithTrafficSecrets(
         clientWriteKey,
         serverWriteKey,
         clientWriteIv,
-        serverWriteIv
+        serverWriteIv,
+        hashAlgorithm: hashAlgorithm
     )
 }
 
@@ -3096,7 +3372,7 @@ private func tls13KeyIvLensFromCipherSuite(cipherSuite: Int64): (Int64, Int64) {
 }
 
 private func tls13HashLenForAlgorithm(algorithm: HashAlgorithm): Int64 {
-    if (algorithm == HashAlgorithm.SHA256) {
+    if (algorithm == HashAlgorithm.SHA256 || algorithm == HashAlgorithm.SM3) {
         return TLS13_SHA256_HASH_LEN
     }
     if (algorithm == HashAlgorithm.SHA384) {
@@ -3121,6 +3397,9 @@ private func tls13HashWithAlgorithm(algorithm: HashAlgorithm, data: Array<Byte>)
     }
     if (algorithm == HashAlgorithm.SHA384) {
         return sha384(data)
+    }
+    if (algorithm == HashAlgorithm.SM3) {
+        return hash(HashAlgorithm.SM3, data)
     }
     throw CryptoException(Unsupported, "TLS1.3 hash algorithm is unsupported: ${algorithm.toString()}")
 }
@@ -3185,6 +3464,36 @@ private func tls13ValidateOfferedCipherSuites(cipherSuites: Array<Int64>): Unit 
     }
 }
 
+private func tls13RequireSmCipherSuite(cipherSuite: Int64): Unit {
+    if (
+        cipherSuite != TLS13_CIPHER_SUITE_SM4_GCM_SM3 &&
+        cipherSuite != TLS13_CIPHER_SUITE_SM4_CCM_SM3
+    ) {
+        throw CryptoException(Unsupported, "RFC8998 requires TLS_SM4_GCM_SM3 or TLS_SM4_CCM_SM3")
+    }
+}
+
+private func tls13ValidateSmCipherSuites(cipherSuites: Array<Int64>): Unit {
+    if (cipherSuites.size == 0) {
+        throw CryptoException(InvalidArgument, "RFC8998 cipher suite list must not be empty")
+    }
+    for (cipherSuite in cipherSuites) {
+        tls13RequireSmCipherSuite(cipherSuite)
+    }
+}
+
+private func tls13SelectSmCipherSuite(offered: Array<Int64>): Int64 {
+    for (cipherSuite in offered) {
+        if (
+            cipherSuite == TLS13_CIPHER_SUITE_SM4_GCM_SM3 ||
+            cipherSuite == TLS13_CIPHER_SUITE_SM4_CCM_SM3
+        ) {
+            return cipherSuite
+        }
+    }
+    throw CryptoException(ParseError, "RFC8998 client did not offer an SM4/SM3 cipher suite")
+}
+
 private func tls13SelectCipherSuite(offered: Array<Int64>): Int64 {
     var i = 0
     while (i < offered.size) {
@@ -3211,6 +3520,42 @@ private func tls13ExtractClientKeyShareFromHello(clientHello: TlsClientHello): E
 private func tls13ExtractClientX25519KeyShareFromHello(clientHello: TlsClientHello): Array<Byte> {
     let ext = tls13RequireExtension(clientHello.extensions, TLS13_EXT_KEY_SHARE, "TLS1.3 client key_share")
     tls13DecodeClientX25519KeyShare(ext.data)
+}
+
+private func tls13ExtractClientSm2KeyShareFromHello(clientHello: TlsClientHello): Sm2PublicKey {
+    let ext = tls13RequireExtension(clientHello.extensions, TLS13_EXT_KEY_SHARE, "RFC8998 client key_share")
+    tls13DecodeClientSm2KeyShare(ext.data)
+}
+
+private func tls13RequireSmClientProfile(clientHello: TlsClientHello): Unit {
+    let groups = tls13DecodeVector16(
+        tls13RequireExtension(clientHello.extensions, TLS13_EXT_SUPPORTED_GROUPS, "RFC8998 supported_groups").data,
+        "RFC8998 supported_groups"
+    )
+    if (!tls13Uint16VectorContains(groups, TLS13_GROUP_CURVE_SM2)) {
+        throw CryptoException(ParseError, "RFC8998 supported_groups must include curveSM2")
+    }
+    let schemes = tls13DecodeVector16(
+        tls13RequireExtension(clientHello.extensions, TLS13_EXT_SIGNATURE_ALGORITHMS, "RFC8998 signature_algorithms").data,
+        "RFC8998 signature_algorithms"
+    )
+    if (!tls13Uint16VectorContains(schemes, TLS13_SIG_SCHEME_SM2_SM3)) {
+        throw CryptoException(ParseError, "RFC8998 signature_algorithms must include sm2sig_sm3")
+    }
+}
+
+private func tls13Uint16VectorContains(encoded: Array<Byte>, expected: Int64): Bool {
+    if ((encoded.size % 2) != 0) {
+        throw CryptoException(ParseError, "TLS1.3 uint16 vector length is invalid")
+    }
+    var offset = 0
+    while (offset < encoded.size) {
+        if (tls13DecodeUInt16(encoded, offset) == expected) {
+            return true
+        }
+        offset += 2
+    }
+    false
 }
 
 private func tls13FindOptionalExtension(extensions: Array<TlsExtension>, extType: Int64): ?TlsExtension {
@@ -3544,6 +3889,19 @@ private func tls13EncodeClientX25519KeyShare(publicKey: Array<Byte>): Array<Byte
     tls13EncodeVector16(entry)
 }
 
+private func tls13EncodeClientSm2KeyShare(publicKey: Sm2PublicKey): Array<Byte> {
+    let point = sm2PublicKeyToUncompressed(publicKey)
+    let entry = Array<Byte>(4 + point.size, repeat: 0)
+    let group = tls13EncodeUInt16(TLS13_GROUP_CURVE_SM2)
+    let keyLen = tls13EncodeUInt16(point.size)
+    entry[0] = group[0]
+    entry[1] = group[1]
+    entry[2] = keyLen[0]
+    entry[3] = keyLen[1]
+    secureCopyInto(point, entry, dstOffset: 4)
+    tls13EncodeVector16(entry)
+}
+
 private func tls13DecodeClientKeyShare(data: Array<Byte>): EcPublicKey {
     let entries = tls13DecodeVector16(data, "TLS1.3 client key_share list")
     if (entries.size < 5) {
@@ -3604,6 +3962,28 @@ private func tls13DecodeClientX25519KeyShare(data: Array<Byte>): Array<Byte> {
     throw CryptoException(ParseError, "TLS1.3 client key_share does not include X25519 group")
 }
 
+private func tls13DecodeClientSm2KeyShare(data: Array<Byte>): Sm2PublicKey {
+    let entries = tls13DecodeVector16(data, "RFC8998 client key_share list")
+    var offset = 0
+    while (offset < entries.size) {
+        if (offset + 4 > entries.size) {
+            throw CryptoException(ParseError, "RFC8998 client key_share entry is truncated")
+        }
+        let group = tls13DecodeUInt16(entries, offset)
+        let keyLen = tls13DecodeUInt16(entries, offset + 2)
+        offset += 4
+        if (keyLen == 0 || offset + keyLen > entries.size) {
+            throw CryptoException(ParseError, "RFC8998 client key_share entry length is invalid")
+        }
+        let keyBytes = entries[offset..(offset + keyLen)]
+        offset += keyLen
+        if (group == TLS13_GROUP_CURVE_SM2) {
+            return sm2PublicKeyFromUncompressed(keyBytes)
+        }
+    }
+    throw CryptoException(ParseError, "RFC8998 client key_share does not include curveSM2")
+}
+
 private func tls13EncodeServerKeyShare(publicKey: EcPublicKey): Array<Byte> {
     let (groupId, fieldBytes) = tls13ResolveEcdheCurveSpecFromPublicKey(publicKey)
     let point = tls13EncodeEcPoint(publicKey, fieldBytes)
@@ -3628,6 +4008,19 @@ private func tls13EncodeServerX25519KeyShare(publicKey: Array<Byte>): Array<Byte
     out[2] = keyLen[0]
     out[3] = keyLen[1]
     secureCopyInto(publicKey, out, dstOffset: 4)
+    out
+}
+
+private func tls13EncodeServerSm2KeyShare(publicKey: Sm2PublicKey): Array<Byte> {
+    let point = sm2PublicKeyToUncompressed(publicKey)
+    let out = Array<Byte>(4 + point.size, repeat: 0)
+    let group = tls13EncodeUInt16(TLS13_GROUP_CURVE_SM2)
+    let keyLen = tls13EncodeUInt16(point.size)
+    out[0] = group[0]
+    out[1] = group[1]
+    out[2] = keyLen[0]
+    out[3] = keyLen[1]
+    secureCopyInto(point, out, dstOffset: 4)
     out
 }
 
@@ -3662,6 +4055,20 @@ private func tls13DecodeServerX25519KeyShare(data: Array<Byte>): Array<Byte> {
     let key = data[4..]
     x25519ValidatePublicKey(key)
     key
+}
+
+private func tls13DecodeServerSm2KeyShare(data: Array<Byte>): Sm2PublicKey {
+    if (data.size < 5) {
+        throw CryptoException(ParseError, "RFC8998 server key_share is too short")
+    }
+    if (tls13DecodeUInt16(data, 0) != TLS13_GROUP_CURVE_SM2) {
+        throw CryptoException(Unsupported, "RFC8998 server key_share group is not curveSM2")
+    }
+    let keyLen = tls13DecodeUInt16(data, 2)
+    if (keyLen != 65 || data.size != 4 + keyLen) {
+        throw CryptoException(ParseError, "RFC8998 server curveSM2 key_share length is invalid")
+    }
+    sm2PublicKeyFromUncompressed(data[4..])
 }
 
 private func tls13EncodePskKeyExchangeModes(): Array<Byte> {
