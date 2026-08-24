@@ -1,5 +1,103 @@
 package jinguissl_core.crypto.sm3
 
+import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
+
+private let SM3_IV: Array<UInt32> = [
+    UInt32(0x7380166F), UInt32(0x4914B2B9), UInt32(0x172442D7), UInt32(0xDA8A0600),
+    UInt32(0xA96F30BC), UInt32(0x163138AA), UInt32(0xE38DEE4D), UInt32(0xB0FB0E4E)
+]
+
+private let SM3_BLOCK_SIZE: Int64 = 64
+private let SM3_DIGEST_SIZE: Int64 = 32
+
+/**
+ * Incremental SM3 digest context.
+ *
+ * A context accepts any number of chunks and may be reused after `reset`.
+ * Calling `update` or `finish` after a digest has been finalized is rejected.
+ */
+public class Sm3Context {
+    private var state: Array<UInt32> = SM3_IV.clone()
+    private var buffer: Array<Byte> = Array<Byte>(SM3_BLOCK_SIZE, repeat: UInt8(0))
+    private var buffered: Int64 = 0
+    private var totalBytes: UInt64 = 0
+    private var finalized: Bool = false
+
+    public init() {}
+
+    /** Add a chunk to this digest. */
+    public func update(data: Array<Byte>): Unit {
+        if (finalized) {
+            throw CryptoException(InvalidArgument, "SM3 context is already finalized")
+        }
+        if (UInt64(data.size) > UInt64(0x1FFF_FFFF_FFFF_FFFF) - totalBytes) {
+            throw CryptoException(InvalidArgument, "SM3 bit length overflow")
+        }
+        totalBytes += UInt64(data.size)
+
+        var offset: Int64 = 0
+        while (offset < data.size) {
+            let take = minInt64(SM3_BLOCK_SIZE - buffered, data.size - offset)
+            var i: Int64 = 0
+            while (i < take) {
+                buffer[buffered + i] = data[offset + i]
+                i += 1
+            }
+            buffered += take
+            offset += take
+
+            if (buffered == SM3_BLOCK_SIZE) {
+                sm3Compress(state, buffer)
+                buffered = 0
+            }
+        }
+    }
+
+    /** Finalize and return the 32-byte digest. */
+    public func finish(): Array<Byte> {
+        if (finalized) {
+            throw CryptoException(InvalidArgument, "SM3 context is already finalized")
+        }
+        if (totalBytes > UInt64(0x1FFF_FFFF_FFFF_FFFF)) {
+            throw CryptoException(InvalidArgument, "SM3 bit length overflow")
+        }
+
+        let bitLength = totalBytes * 8
+        buffer[buffered] = UInt8(0x80)
+        buffered += 1
+
+        if (buffered > 56) {
+            while (buffered < SM3_BLOCK_SIZE) {
+                buffer[buffered] = UInt8(0)
+                buffered += 1
+            }
+            sm3Compress(state, buffer)
+            buffered = 0
+        }
+        while (buffered < 56) {
+            buffer[buffered] = UInt8(0)
+            buffered += 1
+        }
+        var i: Int64 = 0
+        while (i < 8) {
+            buffer[56 + i] = UInt8((bitLength >> UInt64(56 - i * 8)) & UInt64(0xFF))
+            i += 1
+        }
+        sm3Compress(state, buffer)
+        finalized = true
+        stateToDigest(state)
+    }
+
+    /** Reset this context to the SM3 initial state. */
+    public func reset(): Unit {
+        state = SM3_IV.clone()
+        buffer = Array<Byte>(SM3_BLOCK_SIZE, repeat: UInt8(0))
+        buffered = 0
+        totalBytes = 0
+        finalized = false
+    }
+}
+
 /**
  * SM3 cryptographic hash function (GM/T 0004-2012).
  *
@@ -9,70 +107,90 @@ package jinguissl_core.crypto.sm3
  * @return 32-byte SM3 digest.
  */
 public func sm3(data: Array<Byte>): Array<Byte> {
-    /* SM3 initial hash value (GM/T 0004-2012 §4.1) */
-    let iv: Array<UInt32> = [
-        UInt32(0x7380166F), UInt32(0x4914B2B9), UInt32(0x172442D7), UInt32(0xDA8A0600),
-        UInt32(0xA96F30BC), UInt32(0x163138AA), UInt32(0xE38DEE4D), UInt32(0xB0FB0E4E)
-    ]
+    let context = Sm3Context()
+    context.update(data)
+    context.finish()
+}
 
-    let blockSize: Int64 = 64
-
-    /* Padding (same as SHA-256 style): append 0x80, then zeros, then 64-bit length in bits */
-    let originalSizeBits = UInt64(data.size) * 8
-
-    var paddedSize = data.size + 1  /* at least one byte for 0x80 */
-    while ((paddedSize % blockSize) != 56) {
-        paddedSize += 1
-    }
-    paddedSize += 8  /* 8 bytes for length */
-
-    var padded = Array<Byte>(paddedSize, repeat: UInt8(0))
-    /* Copy original data */
-    var i = 0
-    while (i < data.size) {
-        padded[i] = data[i]
+/** Compute HMAC-SM3. */
+public func hmacSm3(key: Array<Byte>, data: Array<Byte>): Array<Byte> {
+    let normalized = if (key.size > SM3_BLOCK_SIZE) { sm3(key) } else { key }
+    let innerPad = Array<Byte>(SM3_BLOCK_SIZE, repeat: UInt8(0x36))
+    let outerPad = Array<Byte>(SM3_BLOCK_SIZE, repeat: UInt8(0x5C))
+    var i: Int64 = 0
+    while (i < normalized.size) {
+        innerPad[i] ^= normalized[i]
+        outerPad[i] ^= normalized[i]
         i += 1
     }
-    /* Append 0x80 */
-    padded[i] = UInt8(0x80)
-    /* Zeros already in place from initialization */
 
-    /* Append 64-bit big-endian length */
-    padded[paddedSize - 8] = UInt8((originalSizeBits >> 56) & 0xFF)
-    padded[paddedSize - 7] = UInt8((originalSizeBits >> 48) & 0xFF)
-    padded[paddedSize - 6] = UInt8((originalSizeBits >> 40) & 0xFF)
-    padded[paddedSize - 5] = UInt8((originalSizeBits >> 32) & 0xFF)
-    padded[paddedSize - 4] = UInt8((originalSizeBits >> 24) & 0xFF)
-    padded[paddedSize - 3] = UInt8((originalSizeBits >> 16) & 0xFF)
-    padded[paddedSize - 2] = UInt8((originalSizeBits >> 8) & 0xFF)
-    padded[paddedSize - 1] = UInt8(originalSizeBits & 0xFF)
+    let inner = Sm3Context()
+    inner.update(innerPad)
+    inner.update(data)
+    let innerDigest = inner.finish()
 
-    /* Process blocks */
-    var state = iv.clone()
-    let blocks = paddedSize / blockSize
+    let outer = Sm3Context()
+    outer.update(outerPad)
+    outer.update(innerDigest)
+    outer.finish()
+}
+
+/**
+ * SM3 counter-mode key derivation function used by SM2.
+ *
+ * The counter starts at one and is encoded as a four-byte big-endian value.
+ */
+public func sm3Kdf(input: Array<Byte>, outputLen: Int64): Array<Byte> {
+    if (outputLen < 0) {
+        throw CryptoException(InvalidArgument, "SM3 KDF output length must not be negative")
+    }
+    if (outputLen == 0) {
+        return []
+    }
+    if (outputLen > Int64(UInt32(0xFFFF_FFFF)) * SM3_DIGEST_SIZE) {
+        throw CryptoException(InvalidArgument, "SM3 KDF output length is too large")
+    }
+    let blocks = (outputLen + SM3_DIGEST_SIZE - 1) / SM3_DIGEST_SIZE
+
+    let output = Array<Byte>(outputLen, repeat: UInt8(0))
+    var counter: UInt32 = 1
     var offset: Int64 = 0
-    i = 0
-    while (i < blocks) {
-        /* Extract one 64-byte block */
-        var block = Array<Byte>(64, repeat: UInt8(0))
-        var j = 0
-        while (j < 64) {
-            block[j] = padded[offset + j]
-            j += 1
+    while (offset < outputLen) {
+        let context = Sm3Context()
+        context.update(input)
+        context.update([
+            UInt8((counter >> 24) & UInt32(0xFF)),
+            UInt8((counter >> 16) & UInt32(0xFF)),
+            UInt8((counter >> 8) & UInt32(0xFF)),
+            UInt8(counter & UInt32(0xFF))
+        ])
+        let digest = context.finish()
+        let take = minInt64(SM3_DIGEST_SIZE, outputLen - offset)
+        var i: Int64 = 0
+        while (i < take) {
+            output[offset + i] = digest[i]
+            i += 1
         }
-        sm3Compress(state, block)
-        offset += blockSize
-        i += 1
+        offset += take
+        if (offset < outputLen) {
+            counter += 1
+        }
     }
+    output
+}
 
-    /* Output: 8 x uint32 in big-endian */
-    var result = Array<Byte>(32, repeat: UInt8(0))
-    i = 0
+private func minInt64(a: Int64, b: Int64): Int64 {
+    if (a < b) { a } else { b }
+}
+
+private func stateToDigest(state: Array<UInt32>): Array<Byte> {
+    let result = Array<Byte>(SM3_DIGEST_SIZE, repeat: UInt8(0))
+    var i: Int64 = 0
     while (i < 8) {
-        result[i * 4]     = UInt8((state[i] >> 24) & 0xFF)
-        result[i * 4 + 1] = UInt8((state[i] >> 16) & 0xFF)
-        result[i * 4 + 2] = UInt8((state[i] >> 8) & 0xFF)
-        result[i * 4 + 3] = UInt8(state[i] & 0xFF)
+        result[i * 4] = UInt8((state[i] >> 24) & UInt32(0xFF))
+        result[i * 4 + 1] = UInt8((state[i] >> 16) & UInt32(0xFF))
+        result[i * 4 + 2] = UInt8((state[i] >> 8) & UInt32(0xFF))
+        result[i * 4 + 3] = UInt8(state[i] & UInt32(0xFF))
         i += 1
     }
     result

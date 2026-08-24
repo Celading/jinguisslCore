@@ -1,5 +1,7 @@
 # 密码原语使用说明
 
+SM2、SM3、SM4 的完整 API、编码约束与证据边界单列在[国密基础算法指南](gm-crypto.md)。
+
 ## AES (Advanced Encryption Standard)
 
 `jinguissl_core.crypto.aes` 提供 AES 加密的多种模式。
@@ -9,7 +11,7 @@
 | 模式 | 描述 | 安全等级 |
 |:--|:--|:--|
 | ECB | 电子密码本模式 | 不安全，仅兼容遗留系统 |
-| CBC | 密码分组链接模式 | 需要 IV，抗重放 |
+| CBC | 密码分组链接模式 | 需要不可预测 IV；自身不提供认证或抗重放 |
 | CTR | 计数器模式 | 流模式，可并行 |
 | GCM | 伽罗瓦计数器模式 | AEAD，推荐 |
 
@@ -140,9 +142,9 @@ let mac = poly1305Mac(macKey, message)
 |:--|:--|:--|
 | MD5 | 16 字节 | 不安全，仅兼容遗留系统 |
 | SHA-1 | 20 字节 | 不安全，仅兼容遗留系统 |
-| SHA-256 | 32 字节 | 安全，推荐 |
-| SHA-384 | 48 字节 | 安全，推荐 |
-| SHA-512 | 64 字节 | 安全，推荐 |
+| SHA-256 | 32 字节 | 现代默认候选 |
+| SHA-384 | 48 字节 | 现代默认候选 |
+| SHA-512 | 64 字节 | 现代默认候选 |
 
 ### 哈希函数
 
@@ -532,4 +534,3 @@ let available = csprngIsAvailable()     // CSPRNG 是否可用
 let random = csprngBytes(32)            // 生成 32 字节随机数
 let seed = randomSeed(size: 16)         // 安全随机种子
 ```
-
