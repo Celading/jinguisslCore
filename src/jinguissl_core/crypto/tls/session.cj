@@ -161,6 +161,10 @@ public func tlsIsSessionTicketExpired(ticket: TlsSessionTicket, nowUnixSeconds!:
     ticket.isExpired(resolveSessionUnixSeconds(nowUnixSeconds))
 }
 
+/**
+ * Encodes trusted local session state, including the session secret.
+ * The result is not an opaque or protected TLS wire ticket and must never be sent to a peer.
+ */
 public func tlsEncodeSessionTicket(ticket: TlsSessionTicket): Array<Byte> {
     let serverNameBytes = ticket.identity.serverName.toArray()
     let alpnBytes = ticket.identity.alpnProtocol.toArray()
@@ -208,7 +212,8 @@ public func tlsEncodeSessionTicket(ticket: TlsSessionTicket): Array<Byte> {
 }
 
 /**
- * tlsDecodeSessionTicket.
+ * Decodes session state produced by trusted local storage.
+ * Never use this API to decode a peer-controlled TLS wire ticket.
  *
  * @throws CryptoException 当操作失败时抛出
  */

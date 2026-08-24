@@ -230,6 +230,9 @@ SM3 哈希（GM/T 0004-2012）。
 | API | 说明 |
 |:--|:--|
 | `sm3(data)` | SM3 哈希，返回 32 字节 |
+| `Sm3Context.update/finish/reset` | 增量 SM3 上下文 |
+| `hmacSm3(key, data)` | HMAC-SM3 |
+| `sm3Kdf(input, outputLen)` | SM2 使用的 SM3 计数 KDF |
 
 ## `jinguissl_core.crypto.sm4`
 
@@ -237,12 +240,37 @@ SM4 分组密码（GM/T 0002-2012）。
 
 | API | 说明 |
 |:--|:--|
-| `sm4Encrypt(key, data)` | SM4 ECB 加密 |
-| `sm4Decrypt(key, data)` | SM4 ECB 解密 |
+| `Sm4Context` | 可复用 SM4 轮密钥与单分组加解密 |
+| `sm4Encrypt` / `sm4Decrypt` | 兼容的非空、整分组 ECB API |
+| `sm4EcbEncrypt` / `sm4EcbDecrypt` | ECB，可选严格 PKCS#7 |
+| `sm4CbcEncrypt` / `sm4CbcDecrypt` | CBC，可选严格 PKCS#7 |
+| `sm4CtrCrypt` | 128 位大端计数器 CTR |
+| `sm4GcmEncrypt` / `sm4GcmDecrypt` | GCM AEAD；解密标签错误时抛出异常 |
+| `sm4CcmEncrypt` / `sm4CcmDecrypt` | CCM AEAD；7–13 字节 nonce |
+
+## `jinguissl_core.crypto.sm2`
+
+SM2 公钥密码能力。身份参数必须显式传入，密文编码固定为原始 C1C3C2。
+
+| API | 说明 |
+|:--|:--|
+| `Sm2PrivateKey` / `Sm2PublicKey` | sm2p256v1 密钥与点校验 |
+| `sm2GeneratePrivateKey()` / `sm2PublicKey(privateKey)` | 生成私钥与派生公钥 |
+| `sm2PublicKeyToUncompressed` / `sm2PublicKeyFromUncompressed` | 65 字节未压缩点编解码 |
+| `sm2ComputeZa(identity, publicKey)` | 计算身份绑定摘要 ZA |
+| `sm2Sign` / `sm2Verify` | 显式身份绑定的消息签名与验签 |
+| `sm2Encrypt` / `sm2Decrypt` | 原始 C1C3C2 加解密与 C3 失败关闭校验 |
+| `sm2SharedPoint` | 返回 64 字节 X‖Y 共享点 |
+| `sm2InitiatorKeyExchange` / `sm2ResponderKeyExchange` | 双方静态/临时密钥、ZA/ZB、派生密钥与确认值 |
+| `sm2VerifyConfirmation` | 无逐字节提前退出地比较 32 字节确认值 |
+
+完整约束与示例见[国密算法指南](../guide/gm-crypto.md)。
 
 ## `jinguissl_core.crypto.kem`
 
 密钥封装机制。
+
+当前为传统 RSA-KEM/ECDH-KEM 支撑，不是 ML-KEM/PQC 实现。
 
 | API | 说明 |
 |:--|:--|
@@ -265,6 +293,19 @@ X.509 证书处理（参见 x509 指南文档获取完整 API）。
 - `x509CreateSystemTrustPolicy`
 - CRL 解析和验证
 
+## `jinguissl_core.crypto.quic`
+
+QUIC v1/v2 包保护构件。
+
+关键函数和类型：
+- `QuicAeadAlgorithm`
+- `quicInitialSecrets` / `quicInitialKeyIv` / `quicInitialHpKey`
+- `quicAeadEncrypt` / `quicAeadDecrypt`
+- `quicHpAesEncrypt` / `quicHpChaChaEncrypt`
+- `quicRetryIntegrityTag` / `quicVerifyRetryIntegrity`
+
+该模块不实现 QUIC transport、拥塞控制、stream 或 HTTP/3。
+
 ## `jinguissl_core.crypto.tls`
 
 TLS 协议（参见 TLS 指南文档获取完整 API）。
@@ -275,6 +316,17 @@ TLS 协议（参见 TLS 指南文档获取完整 API）。
 - TLS 1.2 和 TLS 1.3 握手流
 - 记录层加解密
 - 会话管理
+
+PSK 保留显式密钥和 binder 验证路径，并提供受限的单进程
+`Tls13OpaqueTicketStore`。它使用 CSPRNG opaque label、ticket nonce 派生、
+age/lifetime、SNI/ALPN/cipher-hash 绑定、binder、rotation 与成功后单次消费。
+`tls13BuildClientHelloFromResumptionTicket` 要求带 key_share 的 PSK+DHE base
+ClientHello；`validateAndConsumeClientHello` 只返回验证后的 PSK/context，不生成
+ServerHello，也不代表恢复握手完成。调用方负责串行化；跨进程共享、0-RTT、
+HelloRetryRequest transcript、完整 resumed-handshake composer 与外部在线互操作未开放。
+
+`session.cj` 的 ticket 编解码仍是包含 secret 的受信任本地序列化，不可作为
+wire ticket。无密钥 PSK 与 secret-bearing self-describing ticket 便捷路径失败关闭。
 
 ## `jinguissl_core.crypto.ssh`
 
@@ -291,7 +343,7 @@ SSH 协议。
 
 ## `jinguissl_core.crypto.compliance`
 
-合规性管理。
+算法许可与 policy profile。它不构成 FIPS 140 模块认证。
 
 | API | 说明 |
 |:--|:--|
