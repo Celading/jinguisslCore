@@ -456,8 +456,8 @@ public class Tls13HandshakeFlowTestSuite {
         let pskIdentity = "ticket-A".toArray()
         let psk = hexToBytes(TEST_HEX_32_00112233445566778899AABBCCDDEEFF_00112233445566778899AABBCCDDEEFF)
 
-        let clientHello = tls13BuildClientHelloPsk(pskIdentity)
-        let serverHello = tls13BuildServerHelloForPsk(clientHello, selectedIdentityIndex: 0)
+        let clientHello = tls13BuildClientHelloPskWithBinder(pskIdentity, psk)
+        let serverHello = tls13BuildServerHelloForPskWithBinder(clientHello, psk)
         let transcriptHash = sha256(concat(clientHello, serverHello))
 
         let clientSecrets = tls13DeriveSecretsFromPsk(psk, transcriptHash)
@@ -473,7 +473,68 @@ public class Tls13HandshakeFlowTestSuite {
     }
 
     @TestCase
-    public func testTls13SessionTicketPskBinderFlow(): Unit {
+    public func testTls13RejectsUnverifiedPskAndSelfDescribingWireTicket(): Unit {
+        let attackerPsk = hexToBytes(TEST_HEX_32_00112233445566778899AABBCCDDEEFF_00112233445566778899AABBCCDDEEFF)
+        try {
+            _ = tls13BuildClientHelloPsk("attacker-selected-identity".toArray())
+            @Fail("TLS1.3 client must not emit a PSK offer without a binder key")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "UNSUPPORTED")
+        }
+
+        let unverifiedHello = tls13BuildClientHelloPskWithBinder(
+            "attacker-selected-identity".toArray(),
+            attackerPsk
+        )
+        try {
+            _ = tls13BuildServerHelloForPsk(unverifiedHello)
+            @Fail("TLS1.3 server must not select a PSK identity without verifying its binder")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "UNSUPPORTED")
+        }
+
+        let attackerTicket = tlsCreateSessionTicket(
+            TlsSessionIdentity(
+                TLS1_3,
+                "attacker-resumption-id".toArray(),
+                serverName: TEST_HOST_API,
+                alpnProtocol: "h2"
+            ),
+            attackerPsk,
+            nonce: [UInt8(0x41), UInt8(0x42)],
+            nowUnixSeconds: 4000,
+            ttlSeconds: 3600
+        )
+        let forgedWireIdentity = tlsEncodeSessionTicket(attackerTicket)
+        let forgedHello = tls13BuildClientHelloPskWithBinder(
+            forgedWireIdentity,
+            attackerPsk
+        )
+        try {
+            _ = tls13BuildClientHelloPskFromSessionTicket(attackerTicket)
+            @Fail("TLS1.3 client must not expose local ticket serialization as a wire identity")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "UNSUPPORTED")
+        }
+        try {
+            _ = tls13BuildNewSessionTicketFromSessionTicket(attackerTicket)
+            @Fail("TLS1.3 server must not emit a self-describing plaintext session ticket")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "UNSUPPORTED")
+        }
+        try {
+            _ = tls13BuildServerHelloForPskFromSessionTicket(
+                forgedHello,
+                nowUnixSeconds: 4010
+            )
+            @Fail("TLS1.3 server must not trust a self-describing ticket secret from the client")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "UNSUPPORTED")
+        }
+    }
+
+    @TestCase
+    public func testTls13OpaquePskBinderFlowAndLocalTicketSerialization(): Unit {
         let identity = TlsSessionIdentity(
             TLS1_3,
             "resume-id-01".toArray(),
@@ -488,58 +549,54 @@ public class Tls13HandshakeFlowTestSuite {
             ttlSeconds: 120
         )
 
-        let newSessionTicket = tls13BuildNewSessionTicketFromSessionTicket(ticket, ticketAgeAdd: 0x01020304)
+        let opaqueTicketIdentity = "opaque-ticket-from-protected-backend".toArray()
+        let newSessionTicket = tls13EncodeNewSessionTicketHandshake(
+            Tls13NewSessionTicketMessage(
+                120,
+                0x01020304,
+                [UInt8(0x10), UInt8(0x11), UInt8(0x12)],
+                opaqueTicketIdentity
+            )
+        )
         let decodedNst = tls13DecodeNewSessionTicketHandshake(newSessionTicket)
         @Assert(decodedNst.ticketLifetimeSeconds, 120)
         @Assert(decodedNst.ticketAgeAdd, 0x01020304)
         @Assert(decodedNst.ticketNonce, [UInt8(0x10), UInt8(0x11), UInt8(0x12)])
+        @Assert(decodedNst.ticket, opaqueTicketIdentity)
         @Assert(decodedNst.extensions.size, 0)
 
-        let decodedTicket = tls13DecodeSessionTicketFromNewSessionTicket(newSessionTicket)
+        let decodedTicket = tlsDecodeSessionTicket(tlsEncodeSessionTicket(ticket))
         @Assert(decodedTicket.identity.cacheKey(), ticket.identity.cacheKey())
         @Assert(decodedTicket.secret, ticket.secret)
 
-        let clientHello = tls13BuildClientHelloPskFromSessionTicket(ticket)
+        let clientHello = tls13BuildClientHelloPskWithBinder(opaqueTicketIdentity, ticket.secret)
         let extractedIdentity = tls13ExtractClientPskIdentity(clientHello)
-        @Assert(extractedIdentity, tlsEncodeSessionTicket(ticket))
+        @Assert(extractedIdentity, opaqueTicketIdentity)
         @Assert(tls13VerifyClientPskBinder(clientHello, ticket.secret), true)
 
         let serverHello = tls13BuildServerHelloForPskWithBinder(clientHello, ticket.secret)
         let decodedServerHello = tlsDecodeServerHelloHandshake(serverHello)
         @Assert(decodedServerHello.cipherSuite, 0x1301)
 
-        let serverHelloFromTicket = tls13BuildServerHelloForPskFromSessionTicket(
-            clientHello,
-            nowUnixSeconds: 2010
+        let fallbackIdentity = "opaque-ticket-fallback".toArray()
+        let fallbackPsk = hexToBytes(
+            "ffeeddccbbaa00998877665544332211ffeeddccbbaa00998877665544332211"
         )
-        let decodedServerHelloFromTicket = tlsDecodeServerHelloHandshake(serverHelloFromTicket)
-        @Assert(decodedServerHelloFromTicket.cipherSuite, 0x1301)
-        @Assert(tls13ExtractServerSelectedPskIdentity(serverHelloFromTicket), 0)
-
-        let expiredTicket = tlsCreateSessionTicket(
-            TlsSessionIdentity(TLS1_3, "resume-id-expired".toArray(), serverName: TEST_HOST_API, alpnProtocol: "h2"),
-            hexToBytes("11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff"),
-            nonce: [UInt8(0x20), UInt8(0x21)],
-            nowUnixSeconds: 1900,
-            ttlSeconds: 10
+        let multiHello = tls13BuildClientHelloPskWithBinders(
+            [opaqueTicketIdentity, fallbackIdentity],
+            [ticket.secret, fallbackPsk]
         )
-        let fallbackTicket = tlsCreateSessionTicket(
-            TlsSessionIdentity(TLS1_3, "resume-id-fallback".toArray(), serverName: TEST_HOST_API, alpnProtocol: "h2"),
-            hexToBytes("ffeeddccbbaa00998877665544332211ffeeddccbbaa00998877665544332211"),
-            nonce: [UInt8(0x30), UInt8(0x31)],
-            nowUnixSeconds: 2000,
-            ttlSeconds: 200
-        )
-        let multiHello = tls13BuildClientHelloPskFromSessionTickets([expiredTicket, fallbackTicket])
         let offers = tls13ExtractClientPskIdentities(multiHello)
         @Assert(offers.size, 2)
-        @Assert(offers[0].identity, tlsEncodeSessionTicket(expiredTicket))
-        @Assert(offers[1].identity, tlsEncodeSessionTicket(fallbackTicket))
-
-        let selectedIndex = tls13SelectPskIdentityFromSessionTickets(multiHello, nowUnixSeconds: 2050)
-        @Assert(selectedIndex, 1)
-        let autoServerHello = tls13BuildServerHelloForPskBySessionTickets(multiHello, nowUnixSeconds: 2050)
-        @Assert(tls13ExtractServerSelectedPskIdentity(autoServerHello), 1)
+        @Assert(offers[0].identity, opaqueTicketIdentity)
+        @Assert(offers[1].identity, fallbackIdentity)
+        @Assert(tls13VerifyClientPskBinder(multiHello, fallbackPsk, selectedIdentityIndex: 1), true)
+        let fallbackServerHello = tls13BuildServerHelloForPskWithBinder(
+            multiHello,
+            fallbackPsk,
+            selectedIdentityIndex: 1
+        )
+        @Assert(tls13ExtractServerSelectedPskIdentity(fallbackServerHello), 1)
 
         let tampered = clientHello.clone()
         tampered[tampered.size - 1] = UInt8(tampered[tampered.size - 1]) ^ UInt8(0x01)
@@ -551,15 +608,6 @@ public class Tls13HandshakeFlowTestSuite {
             @Assert(e.code.toString(), "PARSE_ERROR")
         }
 
-        try {
-            _ = tls13SelectPskIdentityFromSessionTickets(
-                tls13BuildClientHelloPskFromSessionTickets([expiredTicket]),
-                nowUnixSeconds: 2050
-            )
-            @Fail("TLS1.3 should reject session tickets when all candidates are expired")
-        } catch (e: CryptoException) {
-            @Assert(e.code.toString(), "PARSE_ERROR")
-        }
     }
 
     @TestCase
@@ -771,9 +819,10 @@ public class Tls13HandshakeFlowTestSuite {
             @Assert(e.code.toString(), "UNSUPPORTED")
         }
 
-        let pskHello = tls13BuildClientHelloPsk("ticket-B".toArray())
+        let psk = hexToBytes(TEST_HEX_32_00112233445566778899AABBCCDDEEFF_00112233445566778899AABBCCDDEEFF)
+        let pskHello = tls13BuildClientHelloPskWithBinder("ticket-B".toArray(), psk)
         try {
-            _ = tls13BuildServerHelloForPsk(pskHello, selectedIdentityIndex: 1)
+            _ = tls13BuildServerHelloForPskWithBinder(pskHello, psk, selectedIdentityIndex: 1)
             @Fail("server should reject out-of-range selected identity")
         } catch (e: CryptoException) {
             @Assert(e.code.toString(), "PARSE_ERROR")
@@ -785,7 +834,12 @@ public class Tls13HandshakeFlowTestSuite {
         let profile = FipsProfile.phase1Default()
         tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.ECDHE_1RTT)
         tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.PSK_1RTT)
-        tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.PSK_0RTT_PLACEHOLDER)
+        try {
+            tls13HandshakeRequireAllowed(profile, Tls13HandshakeMode.PSK_0RTT_PLACEHOLDER)
+            @Fail("TLS1.3 0-RTT placeholder must remain disabled")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "UNSUPPORTED")
+        }
 
         let blockedEcdh = FipsProfile.fromText("TLS1.3\nAES-GCM\nRSA")
         try {
