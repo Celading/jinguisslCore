@@ -19,6 +19,10 @@ TLS Layer
 │   ├── Session state
 │   ├── Cipher suite negotiation
 │   └── Key schedule
+├── TLCP / DTLCP (tlcp.cj, tlcp_record.cj, dtlcp.cj)
+│   ├── Dual-certificate ECC / ECDHE handshake
+│   ├── SM3 PRF and SM4-CBC/GCM record
+│   └── Datagram replay, fragmentation and retransmission state
 └── HTTP (http.cj)
     └── Application data encoding
 ```
@@ -59,7 +63,7 @@ TLS Layer
 | `TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256` | 0x0804 |
 | `TLS13_SIG_SCHEME_SM2_SM3` | 0x0708 |
 
-RFC 8998 路径提供 curveSM2 ClientHello/ServerHello、显式 SM3 HKDF 身份、SM4-GCM/CCM record、`TLSv1.3+GM+Cipher+Suite` 身份绑定的 SM2 CertificateVerify，以及 SM2/SM3 X.509 最小解析、签发与验证。当前证据是本地协议闭环；不声明 TLCP/DTLCP 或外部 TLS 实现互操作。
+RFC 8998 路径提供 curveSM2 ClientHello/ServerHello、显式 SM3 HKDF 身份、SM4-GCM/CCM record、`TLSv1.3+GM+Cipher+Suite` 身份绑定的 SM2 CertificateVerify，以及 SM2/SM3 X.509 解析、签发与验证。当前证据是本地协议闭环；不声明外部 TLS 实现互操作。
 
 ### 密钥更新
 
@@ -93,6 +97,38 @@ TLS 1.2 Handshake
 ├── ClientCertificate → ClientKeyExchange → CertificateVerify
 └── ChangeCipherSpec → Finished
 ```
+
+## TLCP / DTLCP 1.1
+
+TLCP 使用协议版本 `0x0101`、签名/加密双证书和 SM3 PRF。本仓对齐固定
+openHiTLS 快照中的四套密码组：
+
+| Suite | 值 | 密钥交换 | Record protection |
+|:--|--:|:--|:--|
+| `ECDHE_SM4_CBC_SM3` | 0xE011 | 带静态身份的 SM2 ECDHE | HMAC-SM3 + SM4-CBC |
+| `ECC_SM4_CBC_SM3` | 0xE013 | 加密证书 SM2 静态交换 | HMAC-SM3 + SM4-CBC |
+| `ECDHE_SM4_GCM_SM3` | 0xE051 | 带静态身份的 SM2 ECDHE | SM4-GCM |
+| `ECC_SM4_GCM_SM3` | 0xE053 | 加密证书 SM2 静态交换 | SM4-GCM |
+
+核心 API 按阶段拆分：
+
+- `tlcpEncode/DecodeClientHello`、`tlcpEncode/DecodeServerHello` 与 server preference suite selection；
+- `tlcpBuild/Parse/VerifyDualCertificateHandshake`，分别检查 signing/encryption leaf 的 keyUsage 和链；
+- 静态 ECC 与 ECDHE `ServerKeyExchange` / `ClientKeyExchange`；
+- `tlcpDeriveSecretsFromPreMaster`、SM3 PRF 和 12 字节 Finished；
+- `TlcpRecordLayer` 的方向性 key block、序号、CBC MAC-then-encrypt 与 GCM AEAD。
+
+静态 ECC 的 SM2 密文在 wire 上使用 ASN.1 `SM2Cipher`。私钥解密或 premaster
+版本检查失败会走 48 字节随机 fallback；record 认证失败不会推进读取序号。
+
+DTLCP 使用 13 字节 record header（type、`0x0101`、epoch、48 位 sequence、length）。
+`DtlcpRecordLayer` 支持当前 epoch 内乱序到达和 64 包 anti-replay window；
+`DtlcpHandshakeReassembler` 处理 12 字节握手分片头、乱序片段和一致 overlap；
+`DtlcpFlightRetransmitter` 提供缓存 flight、最大次数和指数退避状态。
+
+这些是库内可组合协议构件，不含 socket client/server、定时器、MTU/拥塞策略，也不声明
+已经通过 openHiTLS 线上互操作或商密认证。更完整的算法与 PKI 边界见
+[国密能力指南](gm-crypto.md)。
 
 ## 记录层
 

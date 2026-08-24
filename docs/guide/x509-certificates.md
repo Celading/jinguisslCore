@@ -45,6 +45,7 @@ let equal = x509NameDerEquals(name1, name2)
 ```cangjie
 let rsaPubKey = x509ExtractRsaPublicKey(cert)
 let ecPubKey = x509ExtractEcPublicKey(cert)
+let sm2PubKey = x509ExtractSm2PublicKey(cert)
 ```
 
 ### 扩展信息
@@ -191,6 +192,37 @@ let ecPriv = x509ParseEcPrivateKeyPkcs8Pem(pemString)
 // EC PKCS8 DER
 let ecPriv = x509ParseEcPrivateKeyPkcs8Der(derBytes)
 ```
+
+## SM2 PKI 与容器
+
+SM2 公开面覆盖标准 SPKI、SEC1、无加密 PKCS#8、PKCS#10 CSR、颁发者签发证书
+和 CRL。DER 与 PEM 使用同一严格解析路径。
+
+```cangjie
+import jinguissl_core.crypto.sm2.*
+import jinguissl_core.crypto.x509.*
+
+let privateKey = sm2GeneratePrivateKey()
+let publicKeyPem = x509EncodeSm2PublicKeyPem(sm2PublicKey(privateKey))
+let sec1Pem = x509EncodeSm2PrivateKeySec1Pem(privateKey)
+let pkcs8Pem = x509EncodeSm2PrivateKeyPkcs8Pem(privateKey)
+
+let request = x509CreateSm2CertificateRequest("gm-service.example", privateKey)
+x509VerifySm2CertificateRequest(request)
+```
+
+关键 API：
+
+- `x509Encode/ParseSm2PublicKeyDer/Pem`；
+- `x509Encode/ParseSm2PrivateKeySec1Der/Pem`；
+- `x509Encode/ParseSm2PrivateKeyPkcs8Der/Pem`；
+- `x509Create/Parse/VerifySm2CertificateRequest`；
+- `x509CreateSm2Certificate`；
+- `x509CreateSm2Crl`、`x509CrlToPem` 与显式 SM2 identity 验签。
+
+私钥容器解析会同时校验曲线 OID、标量和嵌入公钥，防止容器字段互相矛盾。
+签发、CSR 与 CRL 支持显式 signer identity；错误密钥、错误身份、篡改和吊销会失败关闭。
+当前 PKCS#8 仅为无加密 PrivateKeyInfo，不提供口令加密或硬件密钥容器。
 
 ## 系统信任材料
 

@@ -245,8 +245,13 @@ SM4 分组密码（GM/T 0002-2012）。
 | `sm4EcbEncrypt` / `sm4EcbDecrypt` | ECB，可选严格 PKCS#7 |
 | `sm4CbcEncrypt` / `sm4CbcDecrypt` | CBC，可选严格 PKCS#7 |
 | `sm4CtrCrypt` | 128 位大端计数器 CTR |
+| `sm4CfbEncrypt` / `sm4CfbDecrypt` | CFB128，允许末段不足一块 |
+| `sm4OfbCrypt` | OFB 加解密 |
 | `sm4GcmEncrypt` / `sm4GcmDecrypt` | GCM AEAD；解密标签错误时抛出异常 |
 | `sm4CcmEncrypt` / `sm4CcmDecrypt` | CCM AEAD；7–13 字节 nonce |
+| `sm4XtsEncrypt` / `sm4XtsDecrypt` | XTS 与末段 ciphertext stealing；32 字节双 key |
+| `sm4HctrEncrypt` / `sm4HctrDecrypt` | 固定 openHiTLS profile 的 HCTR 宽块变换 |
+| `sm4Cmac` / `sm4CbcMac` | SM4 CMAC 与固定长度/域分离场景 CBC-MAC |
 
 ## `jinguissl_core.crypto.sm2`
 
@@ -265,6 +270,37 @@ SM2 公钥密码能力。身份参数必须显式传入，密文编码固定为�
 | `sm2VerifyConfirmation` | 无逐字节提前退出地比较 32 字节确认值 |
 
 完整约束与示例见[国密算法指南](../guide/gm-crypto.md)。
+
+## `jinguissl_core.crypto.drbg`
+
+纯仓颉 GM DRBG 状态机。
+
+| API | 说明 |
+|:--|:--|
+| `Sm3HashDrbg` | 显式 entropy/nonce/personalization 的 SM3 Hash-DRBG |
+| `Sm4CtrDrbg` | 带 block-cipher derivation function 的 SM4-CTR-DRBG |
+| `generate` / `generateBytes` | 单次受限生成与自动分段生成 |
+| `reseed` / `reseedFromSystem` | 显式或系统 CSPRNG reseed |
+| `uninstantiate` | 清除并永久停用当前上下文 |
+| `sm3HashDrbgFromSystem` / `sm4CtrDrbgFromSystem` | 从系统 CSPRNG 实例化 |
+
+## `jinguissl_core.crypto.sm9`
+
+SM9 identity-based cryptography。
+
+| API | 说明 |
+|:--|:--|
+| `Sm9G1Point` / `Sm9G2Point` / `Sm9TargetElement` | G1/G2/GT 类型与严格点边界 |
+| `sm9Pairing` | 双线性对 |
+| `sm9HashH1` / `sm9HashH2` | SM9 H1/H2 标量哈希 |
+| `sm9GenerateSignMasterPrivateKey` / `sm9SignMasterPublicKey` | 签名主密钥 |
+| `sm9ExtractSignUserPrivateKey` | 身份绑定签名用户私钥 |
+| `sm9Sign` / `sm9Verify` | 身份签名与验签 |
+| `sm9GenerateEncryptionMasterPrivateKey` / `sm9EncryptionMasterPublicKey` | 加密/交换主密钥 |
+| `sm9ExtractEncryptionUserPrivateKey` | 身份绑定加密/交换用户私钥 |
+| `sm9Encrypt` / `sm9Decrypt` | 原始 C1-C3-C2 加解密与认证 |
+| `sm9BeginKeyExchange` / `sm9CompleteKeyExchange` | 带身份和确认值的密钥交换 |
+| `sm9VerifyKeyExchangeConfirmation` | 常量时间比较语义的确认值校验 |
 
 ## `jinguissl_core.crypto.kem`
 
@@ -292,6 +328,10 @@ X.509 证书处理（参见 x509 指南文档获取完整 API）。
 - `x509LoadSystemTrustAnchors`
 - `x509CreateSystemTrustPolicy`
 - CRL 解析和验证
+- SM2 SPKI、SEC1、PKCS#8 DER/PEM 编解码
+- `x509Create/Parse/VerifySm2CertificateRequest`
+- `x509CreateSm2Certificate` / `x509CreateSm2Crl`
+- 显式 SM2 signer identity 的证书、CSR 与 CRL 验签
 
 ## `jinguissl_core.crypto.quic`
 
@@ -316,6 +356,9 @@ TLS 协议（参见 TLS 指南文档获取完整 API）。
 - TLS 1.2 和 TLS 1.3 握手流
 - 记录层加解密
 - 会话管理
+- TLCP 1.1 hello、四套 SM2/SM3/SM4 suite 与签名/加密双证书
+- TLCP 静态 ECC/SM2 ECDHE、SM3 PRF/Finished 与 CBC/GCM record
+- DTLCP epoch/48 位 sequence、anti-replay、握手分片重组与 cached-flight 退避状态
 
 PSK 保留显式密钥和 binder 验证路径，并提供受限的单进程
 `Tls13OpaqueTicketStore`。它使用 CSPRNG opaque label、ticket nonce 派生、
