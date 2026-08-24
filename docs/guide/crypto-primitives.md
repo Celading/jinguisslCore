@@ -1,5 +1,7 @@
 # 密码原语使用说明
 
+SM2、SM3、SM4 的完整 API、编码约束与证据边界单列在[国密基础算法指南](gm-crypto.md)。
+
 ## AES (Advanced Encryption Standard)
 
 `jinguissl_core.crypto.aes` 提供 AES 加密的多种模式。

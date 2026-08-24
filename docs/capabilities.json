@@ -72,16 +72,16 @@
       "manualPages": ["docs/guide/crypto-primitives.md", "docs/api/modules.md"]
     },
     {
-      "id": "sm3-sm4",
-      "label": "SM3 / SM4",
+      "id": "gm-crypto-suite",
+      "label": "SM2 / SM3 / SM4 国密基础算法栈",
       "status": "implemented-local-test",
-      "summary": "SM3 摘要与 SM4 分组密码基础实现。",
-      "proof": "known vectors and input-boundary tests",
-      "limits": "不声明 GM/T、商密检测或监管认证。",
-      "sourceGlobs": ["src/jinguissl_core/crypto/sm3/*.cj", "src/jinguissl_core/crypto/sm4/*.cj"],
-      "testGlobs": ["src/jinguissl_core/tests/core_sm3_test.cj", "src/jinguissl_core/tests/core_sm4_test.cj"],
-      "readmeTokens": ["SM3 / SM4"],
-      "manualPages": ["docs/guide/crypto-primitives.md", "docs/api/modules.md"]
+      "summary": "纯仓颉运行时 SM2 签验/加解密/身份绑定密钥交换、流式 SM3/HMAC/KDF，以及 SM4 ECB/CBC/CTR/GCM/CCM。",
+      "proof": "GB/T 32918.5 and RFC 8998 vectors, mode vectors, roundtrip and fail-closed negative tests",
+      "limits": "BigInt 私钥路径无完整恒定时间证明；不包含 TLCP、SM2 X.509/ASN.1 密文、SM9、ZUC、GM-DRBG，也不声明商密检测或监管认证。",
+      "sourceGlobs": ["src/jinguissl_core/crypto/sm2/*.cj", "src/jinguissl_core/crypto/sm3/*.cj", "src/jinguissl_core/crypto/sm4/*.cj"],
+      "testGlobs": ["src/jinguissl_core/tests/core_sm2_test.cj", "src/jinguissl_core/tests/core_sm3_test.cj", "src/jinguissl_core/tests/core_sm4_test.cj"],
+      "readmeTokens": ["SM2 / SM3 / SM4"],
+      "manualPages": ["docs/guide/gm-crypto.md", "docs/guide/crypto-primitives.md", "docs/api/modules.md"]
     },
     {
       "id": "ecc-ecdsa-ecdh",

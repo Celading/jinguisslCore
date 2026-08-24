@@ -11,7 +11,7 @@
 <span style="font-weight:100;font-size:24px">JinguiSSL 的算法、证书与协议底层实现</span>
 <p align="center">
   <strong>面向需要直接控制密码原语、X.509、TLS、SSH 与 QUIC 包保护细节的仓颉开发者</strong><br/>
-  <sub>AES · ChaCha20-Poly1305 · RSA · ECC · X25519 · X.509 · TLS · SSH · QUIC</sub>
+  <sub>AES · ChaCha20-Poly1305 · SM2/SM3/SM4 · RSA · ECC · X25519 · X.509 · TLS · SSH · QUIC</sub>
 </p>
 </div>
 
@@ -27,7 +27,8 @@
 |:--|:--|:--|
 | 基础支撑 | 安全字节工具、错误类型、端序、安全比较、清零、CSPRNG | 支撑层，不代表所有私钥路径均为恒定时间 |
 | 摘要与派生 | SHA-256/384/512、HMAC、HKDF；MD5/SHA-1 仅遗留兼容 | known vectors 与协议边界回归 |
-| 对称密码 | AES、ChaCha20-Poly1305、SM3 / SM4 | 本地向量和边界测试；无认证声明 |
+| 国密基础算法 | SM2 / SM3 / SM4：签验、C1C3C2、身份绑定密钥交换、流式摘要/HMAC/KDF、ECB/CBC/CTR/GCM/CCM | 标准向量和失败关闭测试；纯仓颉运行时；无认证声明 |
+| 对称密码 | AES、ChaCha20-Poly1305 | 本地向量和边界测试；无认证声明 |
 | 椭圆曲线 | ECC / ECDSA / ECDH、Ed25519、X25519 | 功能性覆盖；私钥标量路径无完整恒定时间认证 |
 | RSA 与封装 | RSA、PKCS#1 v1.5、PSS、KEM（储备） | RSA-KEM/ECDH-KEM 不等于 ML-KEM/PQC |
 | 大数 | BigNum 与大数兼容层 | 依赖标准库 BigInt，不是恒定时间大数后端 |
@@ -86,6 +87,7 @@ Ed25519、RSA、ECC、TLS、SSH 与 QUIC 都有公开 API，但它们不是同�
 | `crypto/aes` | AES block、CTR、CBC、GCM 与 engine helper |
 | `crypto/chacha20` | ChaCha20、Poly1305 与 AEAD |
 | `crypto/digest` | Hash、HMAC、HKDF |
+| `crypto/sm2` / `crypto/sm3` / `crypto/sm4` | 国密基础算法栈；详见 [国密算法指南](docs/guide/gm-crypto.md) |
 | `crypto/rsa` / `crypto/ecc` / `crypto/ed25519` / `crypto/x25519` | 非对称与密钥协商能力 |
 | `crypto/x509` | 证书、私钥、链验证与 PEM/DER |
 | `crypto/tls` | TLS handshake、record、session 与 HTTP helper |

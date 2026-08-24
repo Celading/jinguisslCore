@@ -59,8 +59,9 @@ cjpm build && cjpm run
 | `jinguissl_core.crypto.ecc.*` | ECC/ECDSA/ECDH |
 | `jinguissl_core.crypto.ed25519.*` | Ed25519 |
 | `jinguissl_core.crypto.x25519.*` | X25519 |
+| `jinguissl_core.crypto.sm2.*` | SM2 签验、C1C3C2 与密钥交换 |
 | `jinguissl_core.crypto.sm3.*` | SM3 哈希 |
-| `jinguissl_core.crypto.sm4.*` | SM4 分组密码 |
+| `jinguissl_core.crypto.sm4.*` | SM4 分组与 AEAD 模式 |
 | `jinguissl_core.crypto.x509.*` | X.509 证书 |
 | `jinguissl_core.crypto.tls.*` | TLS 协议 |
 | `jinguissl_core.crypto.ssh.*` | SSH 协议 |
