@@ -1,10 +1,40 @@
 package jinguissl_core.crypto.sm4
 
+import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
+
 /**
  * SM4 block cipher (GM/T 0002-2012) — ECB mode.
  *
  * Encrypts or decrypts data with a 128-bit key. Input data size must be a multiple of 16.
  */
+
+/** Reusable SM4 key schedule for block and mode operations. */
+public class Sm4Context {
+    private let roundKeys: Array<UInt32>
+
+    public init(key: Array<Byte>) {
+        if (key.size != 16) {
+            throw CryptoException(InvalidArgument, "SM4 key must be 16 bytes")
+        }
+        roundKeys = sm4KeySchedule(key)
+    }
+
+    /** Encrypt exactly one 16-byte block. */
+    public func encryptBlock(block: Array<Byte>): Array<Byte> {
+        if (block.size != 16) {
+            throw CryptoException(InvalidArgument, "SM4 block must be 16 bytes")
+        }
+        sm4CryptBlock(block, roundKeys, true)
+    }
+
+    /** Decrypt exactly one 16-byte block. */
+    public func decryptBlock(block: Array<Byte>): Array<Byte> {
+        if (block.size != 16) {
+            throw CryptoException(InvalidArgument, "SM4 block must be 16 bytes")
+        }
+        sm4CryptBlock(block, roundKeys, false)
+    }
+}
 
 /**
  * Encrypt data with SM4 in ECB mode.
@@ -12,17 +42,14 @@ package jinguissl_core.crypto.sm4
  * @param key 16-byte (128-bit) secret key.
  * @param data Plaintext bytes; size must be a multiple of 16.
  * @return Ciphertext bytes, same length as input.
- * @throws Exception If key or data size is invalid.
+ * @throws CryptoException If key or data size is invalid.
  */
 public func sm4Encrypt(key: Array<Byte>, data: Array<Byte>): Array<Byte> {
-    if (key.size != 16) {
-        throw Exception("SM4 key must be 16 bytes")
-    }
     if ((data.size == 0) || ((data.size % 16) != 0)) {
-        throw Exception("SM4 data size must be a non-zero multiple of 16")
+        throw CryptoException(InvalidArgument, "SM4 data size must be a non-zero multiple of 16")
     }
 
-    let rk = sm4KeySchedule(key)
+    let context = Sm4Context(key)
     let blocks = data.size / 16
     var result = Array<Byte>(data.size, repeat: UInt8(0))
 
@@ -35,7 +62,7 @@ public func sm4Encrypt(key: Array<Byte>, data: Array<Byte>): Array<Byte> {
             block[j] = data[offset + j]
             j += 1
         }
-        let enc = sm4CryptBlock(block, rk, true)
+        let enc = context.encryptBlock(block)
         j = 0
         while (j < 16) {
             result[offset + j] = enc[j]
@@ -52,17 +79,14 @@ public func sm4Encrypt(key: Array<Byte>, data: Array<Byte>): Array<Byte> {
  * @param key 16-byte (128-bit) secret key.
  * @param data Ciphertext bytes; size must be a multiple of 16.
  * @return Plaintext bytes, same length as input.
- * @throws Exception If key or data size is invalid.
+ * @throws CryptoException If key or data size is invalid.
  */
 public func sm4Decrypt(key: Array<Byte>, data: Array<Byte>): Array<Byte> {
-    if (key.size != 16) {
-        throw Exception("SM4 key must be 16 bytes")
-    }
     if ((data.size == 0) || ((data.size % 16) != 0)) {
-        throw Exception("SM4 data size must be a non-zero multiple of 16")
+        throw CryptoException(InvalidArgument, "SM4 data size must be a non-zero multiple of 16")
     }
 
-    let rk = sm4KeySchedule(key)
+    let context = Sm4Context(key)
     let blocks = data.size / 16
     var result = Array<Byte>(data.size, repeat: UInt8(0))
 
@@ -75,7 +99,7 @@ public func sm4Decrypt(key: Array<Byte>, data: Array<Byte>): Array<Byte> {
             block[j] = data[offset + j]
             j += 1
         }
-        let dec = sm4CryptBlock(block, rk, false)
+        let dec = context.decryptBlock(block)
         j = 0
         while (j < 16) {
             result[offset + j] = dec[j]

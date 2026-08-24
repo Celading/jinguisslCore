@@ -72,7 +72,8 @@ let summary = tls13SummarizeDecodedClientHello(clientHello)
 
 ## TLS 1.2 支持
 
-TLS 1.2 提供完整的握手流，支持 ECDHE 密钥交换和服务端/客户端证书。
+TLS 1.2 提供库内握手流构件，覆盖 ECDHE 密钥交换和服务端/客户端证书相关阶段。
+这不等同于浏览器级 HTTPS、外部实现互操作或完整网络产品证明。
 
 ### 握手状态
 
@@ -101,4 +102,26 @@ TLS 1.2 Handshake
 - 会话 ID
 - 密码套件协商
 - 密钥计划
-- 会话恢复
+- 有限容量的进程内 session cache
+
+`tlsEncodeSessionTicket` / `tlsDecodeSessionTicket` 是受信任进程内的本地
+序列化构件，会包含 session secret，不能作为网络上的 TLS 1.3 ticket。
+网络 ticket 应是 opaque 数据库索引，或由拥有方自加密且自认证的值。
+当前无密钥 PSK ServerHello、self-describing session-ticket ClientHello /
+NewSessionTicket 和自动 ticket selection 接口均失败关闭。除显式 PSK 路径外，
+`Tls13OpaqueTicketStore` 提供受限的单进程 opaque ticket owner：wire ticket 是
+32 字节 CSPRNG lookup label，服务端保存由 resumption master secret 与随机 nonce
+派生的 PSK，并校验 lifetime、obfuscated age、SNI、ALPN、cipher/hash 与 binder。
+成功验证会单次消费 ticket，`rotate()` 会清空旧 generation；调用方必须负责
+串行化 store 访问，不能据此声称跨进程 replay 协调。
+
+`tls13BuildClientHelloFromResumptionTicket` 只接受已经带有匹配 cipher 与 key_share
+的 PSK+DHE base ClientHello。`validateAndConsumeClientHello` 返回的只是经验证的
+PSK 与上下文，后续仍必须完成 PSK+DHE key schedule、ServerHello 与完整 transcript。
+当前 binder surface 仅覆盖首个 ClientHello，不接管 HelloRetryRequest transcript；
+也不提供完整 resumed-handshake composer 或声明浏览器/OpenSSL/curl 在线互通。
+0-RTT ticket、ClientHello early_data 和 0-RTT compliance mode 均失败关闭。
+
+恢复 PSK 派生由 RFC 8448 官方向量回归；票据 age/lifetime/binder/binding/single-use/
+rotation 与 0-RTT 拒绝由本地安全测试覆盖。required mTLS 另有缺失客户端 flight、
+不受信链、CertificateVerify 篡改、transcript 不匹配与 Finished 篡改的负向回归。

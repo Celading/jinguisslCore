@@ -208,6 +208,9 @@ let anchors = x509LoadSystemTrustAnchors(extraPemBundlePaths: ["./extra_roots.pe
 let policy = x509CreateSystemTrustPolicy(extraPemBundlePaths: ["./extra_roots.pem"])
 ```
 
+当前实现主要探测常见 PEM bundle 路径，并允许调用方显式追加 bundle。
+它不表示 macOS Keychain、Windows Root Store 或 HarmonyOS 设备信任库已完整接入。
+
 ## CRL 类型
 
 ```cangjie

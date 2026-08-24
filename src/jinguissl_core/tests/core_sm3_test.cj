@@ -69,6 +69,58 @@ public class CoreSm3TestSuite {
         @Assert(hex.size, 64)
     }
 
+    @TestCase
+    public func testSm3IncrementalMatchesOneShotAcrossBlockBoundaries(): Unit {
+        let first = Array<Byte>(63, repeat: UInt8(0xA5))
+        let second: Array<Byte> = [0x01, 0x02]
+        let third = Array<Byte>(130, repeat: UInt8(0x5A))
+        let all = Array<Byte>(first.size + second.size + third.size, repeat: UInt8(0))
+        var offset: Int64 = 0
+        for (value in first) { all[offset] = value; offset += 1 }
+        for (value in second) { all[offset] = value; offset += 1 }
+        for (value in third) { all[offset] = value; offset += 1 }
+
+        let context = Sm3Context()
+        context.update(first)
+        context.update(second)
+        context.update(third)
+        @Assert(bytesToHexLower(context.finish()), bytesToHexLower(sm3(all)))
+    }
+
+    @TestCase
+    public func testSm3ContextResetAndFinalizationGuard(): Unit {
+        let context = Sm3Context()
+        context.update([0x61, 0x62, 0x63])
+        let first = context.finish()
+        var rejected = false
+        try {
+            context.update([0x00])
+        } catch (e: Exception) {
+            rejected = true
+        }
+        @Assert(rejected, true)
+
+        context.reset()
+        context.update([0x61, 0x62, 0x63])
+        @Assert(bytesToHexLower(context.finish()), bytesToHexLower(first))
+    }
+
+    @TestCase
+    public func testHmacSm3IndependentVector(): Unit {
+        let key: Array<Byte> = [0x6B, 0x65, 0x79]
+        let data: Array<Byte> = [0x61, 0x62, 0x63]
+        let expected = "28e63256e7c5a087b1f073265dc53092163f7b82729735d06f28f10af9d52393"
+        @Assert(bytesToHexLower(hmacSm3(key, data)), expected)
+    }
+
+    @TestCase
+    public func testSm3KdfCounterAndTruncation(): Unit {
+        let output = sm3Kdf([0x61, 0x62, 0x63], 40)
+        let expected = "fe1ea80dac6f100c33537bd24619ec7c72a1e8b1ffeaefb1eb52a37791fdaf619db16c0ac7bebb47"
+        @Assert(bytesToHexLower(output), expected)
+        @Assert(sm3Kdf([0x61], 0).size, 0)
+    }
+
     /* Reuse bytesToHexLower from the digest package */
     private func bytesToHexLower(bytes: Array<Byte>): String {
         let hexChars: Array<String> = [
