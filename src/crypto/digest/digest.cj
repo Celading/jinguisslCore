@@ -417,15 +417,20 @@ private func padForSha(data: Array<Byte>, blockSize: Int64): Array<Byte> {
     appendBytes(list, data)
     list.add(UInt8(0x80))
 
-    while ((list.size + 16) % blockSize != 0) {
+    // SHA-1/SHA-256 carry a 64-bit length field, while SHA-384/SHA-512
+    // carry a 128-bit field. Treating both families as 128-bit happens to
+    // produce the same bytes for most inputs, but adds a spurious block when
+    // a SHA-1/SHA-256 message is 55 bytes modulo 64.
+    let lengthFieldSize: Int64 = if (blockSize == 64) { 8 } else { 16 }
+    while ((list.size + lengthFieldSize) % blockSize != 0) {
         list.add(0)
     }
 
-    // Stage-2 baseline: up to 2^64-1 bits input length.
-    let bitLenHigh = UInt64(0)
     let bitLenLow = UInt64(data.size) * UInt64(8)
-
-    appendBytes(list, uInt64ToBytesBE(bitLenHigh))
+    if (lengthFieldSize == 16) {
+        // Stage-2 baseline: up to 2^64-1 bits input length.
+        appendBytes(list, uInt64ToBytesBE(UInt64(0)))
+    }
     appendBytes(list, uInt64ToBytesBE(bitLenLow))
 
     list.toArray()
