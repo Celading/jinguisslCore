@@ -140,6 +140,13 @@ DTLCP 使用 13 字节 record header（type、`0x0101`、epoch、48 位 sequence
 - AEAD 加密与解密
 - 记录分片与重组
 
+TLS 1.3 AES-GCM 与 ChaCha20-Poly1305 路径按 RFC 8446 认证完整的 5 字节
+`TLSCiphertext` header（opaque type、legacy version、密文长度），不会复用
+TLS 1.2 的 13 字节 AAD 缓冲。`TLS_MAX_CIPHERTEXT_LEN` 为最大 16384 字节
+应用明文、一个 `TLSInnerPlaintext` content-type 字节和 16 字节 AEAD tag 的
+总和，即 16401。独立 AEAD 复算测试以序列化 header 构造 AAD，避免库内
+seal/open 同时偏离 wire 语义却仍能自互通。
+
 ## 会话管理
 
 `session.cj` 管理 TLS 会话状态，包括：
