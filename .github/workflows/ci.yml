@@ -1,9 +1,8 @@
 name: JinguiSSL Package CI
 
 env:
-  CANGJIE_SDK_NAME: cangjie-sdk-linux-x64-1.1.3
-  CANGJIE_SDK_SHA256: 2b68905afc466e665ae181595c63f96c18d75fd2c1fb6c6f0cb64e179c28d61a
-  CANGJIE_SDK_URL: "https://cangjie-lang.cn/v1/files/auth/downLoad?nsId=142267&fileName=cangjie-sdk-linux-x64-1.1.3.tar.gz&objectKey=6a19349d21f5a8178d6fd22b"
+  HAPCLI_BOOTSTRAP_REF: 3dd69816af109d5da2378ee54cedb1311fa12842
+  CANGJIE_MIRROR_RELEASES_API: https://api.github.com/repos/HapPub/CangjieSDK-Mirror/releases?per_page=20
 
 on:
   push:
@@ -13,11 +12,14 @@ on:
       - develop
       - "mr/**"
       - "ci/**"
+      - "fix/**"
   pull_request:
     branches:
       - main
       - master
   workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
 
 permissions:
   contents: read
@@ -61,16 +63,33 @@ jobs:
       - name: Capability gate regression tests
         run: python3 scripts/jinguissl_capability_gate_test.py
 
-  package-build-test:
-    name: Package build and public evidence
+  toolchain-build-test:
+    name: ${{ matrix.channel }} toolchain build and test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     needs: public-safety-audit
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - channel: LTS
+            sdk_tag: "1.0.5"
+            experimental: false
+          - channel: STS
+            sdk_tag: "1.1.3"
+            experimental: false
+          - channel: nightly
+            sdk_tag: auto
+            experimental: true
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Initialize public test evidence
+        run: mkdir -p target/public-test-evidence
 
       - name: Hosted dependency graph audit
         run: bash scripts/jinguissl_ci_audit.sh hosted-graph .
@@ -79,25 +98,53 @@ jobs:
         if: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
         run: bash scripts/jinguissl_ci_audit.sh dependency-lock .
 
-      - name: Cache Cangjie SDK
+      - name: Resolve exact Cangjie channel tag
+        id: toolchain
+        env:
+          TOOLCHAIN_CHANNEL: ${{ matrix.channel }}
+          PINNED_SDK_TAG: ${{ matrix.sdk_tag }}
+          GH_API_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$TOOLCHAIN_CHANNEL" = "nightly" ]; then
+            curl -fL --retry 4 --retry-all-errors --connect-timeout 20 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_API_TOKEN}" \
+              "$CANGJIE_MIRROR_RELEASES_API" \
+              -o "$RUNNER_TEMP/cangjie-mirror-releases.json"
+            sdk_tag="$(jq -r '[.[] | select(.draft == false and .prerelease == true and (.tag_name | startswith("1.3.0-alpha.")))][0].tag_name // empty' "$RUNNER_TEMP/cangjie-mirror-releases.json")"
+            if [ -z "$sdk_tag" ]; then
+              echo "No published Cangjie nightly mirror tag was resolved" >&2
+              exit 1
+            fi
+          else
+            sdk_tag="$PINNED_SDK_TAG"
+          fi
+          echo "sdk_tag=$sdk_tag" >> "$GITHUB_OUTPUT"
+          echo "manifest_url=https://github.com/HapPub/CangjieSDK-Mirror/releases/download/$sdk_tag/manifest.v1.json" >> "$GITHUB_OUTPUT"
+
+      - name: Cache HapCLI-managed Cangjie SDK
         uses: actions/cache@v4
         with:
-          path: ~/.cangjie/${{ env.CANGJIE_SDK_NAME }}
-          key: ${{ runner.os }}-${{ env.CANGJIE_SDK_NAME }}-${{ env.CANGJIE_SDK_SHA256 }}
+          path: ${{ runner.temp }}/hap-toolchains/${{ steps.toolchain.outputs.sdk_tag }}
+          key: ${{ runner.os }}-hap-cangjie-${{ steps.toolchain.outputs.sdk_tag }}
 
-      - name: Install Cangjie toolchain
+      - name: Check out reviewed HapCLI bootstrap bridge
+        uses: actions/checkout@v4
+        with:
+          repository: HapPub/Hap
+          ref: ${{ env.HAPCLI_BOOTSTRAP_REF }}
+          path: .ci/hap
+          persist-credentials: false
+
+      - name: Bootstrap Cangjie through HapCLI
         run: |
-          mkdir -p "$HOME/.cangjie"
-          sdk_root="$HOME/.cangjie/${CANGJIE_SDK_NAME}"
-          archive="$RUNNER_TEMP/${CANGJIE_SDK_NAME}.tar.gz"
-          if [ ! -x "$sdk_root/bin/cjc" ] || [ ! -x "$sdk_root/tools/bin/cjpm" ]; then
-            curl -fL --retry 4 --retry-all-errors --connect-timeout 20 "$CANGJIE_SDK_URL" -o "$archive"
-            echo "${CANGJIE_SDK_SHA256}  $archive" | sha256sum -c -
-            rm -rf "$sdk_root"
-            mkdir -p "$sdk_root"
-            tar -xzf "$archive" -C "$sdk_root" --strip-components=1
-          fi
-          . "$sdk_root/envsetup.sh"
+          bash .ci/hap/scripts/ci/bootstrap-cangjie-from-mirror.sh \
+            "${{ steps.toolchain.outputs.manifest_url }}" \
+            linux-x64 \
+            "$RUNNER_TEMP/hap-toolchains/${{ steps.toolchain.outputs.sdk_tag }}" \
+            "$RUNNER_TEMP/cangjie-env.sh" \
+            "$RUNNER_TEMP/cangjie-sdk-resolution.json"
+          . "$RUNNER_TEMP/cangjie-env.sh"
           echo "$CANGJIE_HOME/bin" >> "$GITHUB_PATH"
           echo "$CANGJIE_HOME/tools/bin" >> "$GITHUB_PATH"
           echo "CANGJIE_HOME=$CANGJIE_HOME" >> "$GITHUB_ENV"
@@ -110,11 +157,11 @@ jobs:
             ~/.cjpm
             ~/.cangjie/packages
             ~/.cache/cangjie
-          key: ${{ runner.os }}-cangjie-${{ hashFiles('cjpm.toml', 'cjpm.lock') }}
+          key: ${{ runner.os }}-cangjie-${{ steps.toolchain.outputs.sdk_tag }}-${{ hashFiles('cjpm.toml', 'cjpm.lock') }}
 
       - name: Verify Cangjie toolchain
         run: |
-          . "$CANGJIE_HOME/envsetup.sh"
+          . "$RUNNER_TEMP/cangjie-env.sh"
           command -v cjc
           command -v cjpm
           cjc --version
@@ -122,10 +169,13 @@ jobs:
 
       - name: Prepare public test evidence
         run: |
-          . "$CANGJIE_HOME/envsetup.sh"
-          mkdir -p target/public-test-evidence
+          . "$RUNNER_TEMP/cangjie-env.sh"
+          cp "$RUNNER_TEMP/cangjie-sdk-resolution.json" target/public-test-evidence/
           {
             echo "commit=${GITHUB_SHA}"
+            echo "toolchain_channel=${{ matrix.channel }}"
+            echo "sdk_tag=${{ steps.toolchain.outputs.sdk_tag }}"
+            echo "experimental=${{ matrix.experimental }}"
             echo "runner_os=${RUNNER_OS}"
             echo "runner_arch=${RUNNER_ARCH}"
             cjc --version
@@ -134,21 +184,41 @@ jobs:
 
       - name: Build
         run: |
-          . "$CANGJIE_HOME/envsetup.sh"
+          . "$RUNNER_TEMP/cangjie-env.sh"
           set -o pipefail
           cjpm build 2>&1 | tee target/public-test-evidence/build.log
 
       - name: Test
         run: |
-          . "$CANGJIE_HOME/envsetup.sh"
+          . "$RUNNER_TEMP/cangjie-env.sh"
           set -o pipefail
           cjpm test 2>&1 | tee target/public-test-evidence/test.log
+
+      - name: Collect available toolchain diagnostics
+        if: ${{ always() }}
+        env:
+          TOOLCHAIN_CHANNEL: ${{ matrix.channel }}
+          RESOLVED_SDK_TAG: ${{ steps.toolchain.outputs.sdk_tag }}
+          EXPERIMENTAL: ${{ matrix.experimental }}
+        run: |
+          mkdir -p target/public-test-evidence
+          if [ -f "$RUNNER_TEMP/cangjie-sdk-resolution.json" ]; then
+            cp "$RUNNER_TEMP/cangjie-sdk-resolution.json" target/public-test-evidence/
+          fi
+          if [ -f "$RUNNER_TEMP/cangjie-mirror-releases.json" ]; then
+            cp "$RUNNER_TEMP/cangjie-mirror-releases.json" target/public-test-evidence/
+          fi
+          {
+            echo "toolchain_channel=${TOOLCHAIN_CHANNEL}"
+            echo "resolved_sdk_tag=${RESOLVED_SDK_TAG}"
+            echo "experimental=${EXPERIMENTAL}"
+          } > target/public-test-evidence/matrix.txt
 
       - name: Upload public test evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: jinguissl-public-test-${{ github.sha }}
+          name: jinguissl-${{ matrix.channel }}-${{ steps.toolchain.outputs.sdk_tag }}-${{ github.sha }}
           path: target/public-test-evidence
           if-no-files-found: error
           retention-days: 30

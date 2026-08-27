@@ -8,6 +8,7 @@ import jinguissl_core.crypto.digest.{bytesToHexLower, sha256, sha384, sha512}
 import jinguissl_core.crypto.ecc.{EcPrivateKey, EcPublicKey, NamedCurve, ecPublicFromPrivateKey, ecdsaSign, ecdsaVerify, isFipsCurve}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.crypto.rsa.{RsaPrivateKey, RsaPublicKey, RsaHashAlgorithm, rsaSignPkcs1v15WithHash, rsaVerifyPkcs1v15WithHash}
+import jinguissl_core.crypto.sm2.{Sm2PrivateKey, Sm2PublicKey, sm2PublicKey, sm2PublicKeyFromUncompressed, sm2PublicKeyToUncompressed, sm2Sign, sm2Verify}
 import jinguissl_core.crypto.utils.secureCopyInto
 
 private func joinOidParts(parts: Array<Int64>): String {
@@ -52,6 +53,9 @@ public let X509_OID_SHA512_WITH_RSA: String = joinOidParts([1, 2, 840, 113549, 1
 public let X509_OID_ECDSA_WITH_SHA256: String = joinOidParts([1, 2, 840, 10045, 4, 3, 2])
 public let X509_OID_ECDSA_WITH_SHA384: String = joinOidParts([1, 2, 840, 10045, 4, 3, 3])
 public let X509_OID_ECDSA_WITH_SHA512: String = joinOidParts([1, 2, 840, 10045, 4, 3, 4])
+public let X509_OID_SM2: String = joinOidParts([1, 2, 156, 10197, 1, 301])
+public let X509_OID_SM3_WITH_SM2: String = joinOidParts([1, 2, 156, 10197, 1, 501])
+public let X509_SM2_DEFAULT_SIGNER_IDENTITY: String = "1234567812345678"
 
 public let X509_KEY_USAGE_DIGITAL_SIGNATURE: Int64 = Int64(1) << 0
 public let X509_KEY_USAGE_CONTENT_COMMITMENT: Int64 = Int64(1) << 1
@@ -765,6 +769,15 @@ public func x509VerifyCrlSignatureWithIssuer(
         return
     }
 
+    if (oid == X509_OID_SM3_WITH_SM2) {
+        x509VerifySm2CrlSignatureWithIssuerIdentity(
+            crl,
+            issuer,
+            X509_SM2_DEFAULT_SIGNER_IDENTITY.toArray()
+        )
+        return
+    }
+
     throw CryptoException(Unsupported, "unsupported CRL signature algorithm OID: ${oid}")
 }
 
@@ -1391,6 +1404,42 @@ public func x509CreateSelfSignedEcCertificate(config: X509SelfSignedConfig, priv
     x509ParseDer(certDer)
 }
 
+/** Create a self-signed SM2-with-SM3 certificate for TLS profile and test use. */
+public func x509CreateSelfSignedSm2Certificate(
+    config: X509SelfSignedConfig,
+    privateKey: Sm2PrivateKey,
+    signerIdentity!: Array<Byte> = X509_SM2_DEFAULT_SIGNER_IDENTITY.toArray()
+): X509Certificate {
+    if (signerIdentity.size == 0) {
+        throw CryptoException(InvalidArgument, "SM2 certificate signer identity must not be empty")
+    }
+    let subjectNameDer = encodeCommonName(config.commonName)
+    let signatureAlgorithm = encodeAlgorithmIdentifier(X509_OID_SM3_WITH_SM2, withNullParam: false)
+    let subjectPublicKeyInfo = encodeSm2SubjectPublicKeyInfo(sm2PublicKey(privateKey))
+
+    let tbsParts = ArrayList<Byte>()
+    appendBytes(tbsParts, derWrap(DER_TAG_CONTEXT_0, encodeIntegerFromInt(2)))
+    appendBytes(tbsParts, encodePositiveInteger(config.serialNumber))
+    appendBytes(tbsParts, signatureAlgorithm)
+    appendBytes(tbsParts, subjectNameDer)
+    appendBytes(tbsParts, encodeValidity(config.notBefore, config.notAfter))
+    appendBytes(tbsParts, subjectNameDer)
+    appendBytes(tbsParts, subjectPublicKeyInfo)
+    let extensionsSequence = encodeExtensionsForSelfSigned(config.keyUsageMask)
+    if (extensionsSequence.size > 0) {
+        appendBytes(tbsParts, derWrap(DER_TAG_CONTEXT_3, extensionsSequence))
+    }
+
+    let tbsDer = derWrap(DER_TAG_SEQUENCE, tbsParts.toArray())
+    let (r, s) = sm2Sign(privateKey, signerIdentity, tbsDer)
+    let signature = encodeEcdsaSignatureDer(r, s)
+    let certParts = ArrayList<Byte>()
+    appendBytes(certParts, tbsDer)
+    appendBytes(certParts, signatureAlgorithm)
+    appendBytes(certParts, encodeBitString(signature))
+    x509ParseDer(derWrap(DER_TAG_SEQUENCE, certParts.toArray()))
+}
+
 /**
  * x509VerifyCertificateChain.
  *
@@ -1505,6 +1554,15 @@ public func x509VerifySignatureWithIssuer(cert: X509Certificate, issuer: X509Cer
         return
     }
 
+    if (oid == X509_OID_SM3_WITH_SM2) {
+        x509VerifySm2SignatureWithIssuerIdentity(
+            cert,
+            issuer,
+            X509_SM2_DEFAULT_SIGNER_IDENTITY.toArray()
+        )
+        return
+    }
+
     throw CryptoException(Unsupported, "unsupported certificate signature algorithm OID: ${oid}")
 }
 
@@ -1597,6 +1655,31 @@ public func x509ExtractEcPublicKey(cert: X509Certificate): EcPublicKey {
     decodeEcPublicKeyFromSpki(cert.subjectPublicKeyInfoDer)
 }
 
+/** Extract and validate a curveSM2 SubjectPublicKeyInfo public key. */
+public func x509ExtractSm2PublicKey(cert: X509Certificate): Sm2PublicKey {
+    decodeSm2PublicKeyFromSpki(cert.subjectPublicKeyInfoDer)
+}
+
+/** Verify an SM2-with-SM3 certificate signature with an explicit CA signer identity. */
+public func x509VerifySm2SignatureWithIssuerIdentity(
+    cert: X509Certificate,
+    issuer: X509Certificate,
+    signerIdentity: Array<Byte>
+): Unit {
+    x509RequireIssuerNameMatch(cert, issuer)
+    if (cert.signatureAlgorithmOid != X509_OID_SM3_WITH_SM2) {
+        throw CryptoException(Unsupported, "certificate signature algorithm is not SM2-with-SM3")
+    }
+    if (signerIdentity.size == 0) {
+        throw CryptoException(InvalidArgument, "SM2 certificate signer identity must not be empty")
+    }
+    let issuerKey = decodeSm2PublicKeyFromSpki(issuer.subjectPublicKeyInfoDer)
+    let (r, s) = decodeEcdsaSignature(cert.signatureValue)
+    if (!sm2Verify(issuerKey, signerIdentity, cert.tbsDer, r, s)) {
+        throw CryptoException(ParseError, "X509 SM2-with-SM3 signature verification failed")
+    }
+}
+
 public func x509ParseRsaPrivateKeyPkcs1Der(pkcs1Der: Array<Byte>): RsaPrivateKey {
     decodeRsaPrivateKeyPkcs1(pkcs1Der)
 }
@@ -1650,7 +1733,7 @@ public func x509NameDerEquals(left: X509Name, right: X509Name): Bool {
     bytesEqual(left.der, right.der)
 }
 
-private func parseAlgorithmIdentifier(element: DerElement, label: String): String {
+func parseAlgorithmIdentifier(element: DerElement, label: String): String {
     let reader = DerReader(element.value)
     let oidElem = reader.readElement("${label} OID", expectedTag: DER_TAG_OID)
     let oid = decodeOid(oidElem.value, "${label} OID")
@@ -1660,7 +1743,7 @@ private func parseAlgorithmIdentifier(element: DerElement, label: String): Strin
     oid
 }
 
-private func decodeBitStringValue(payload: Array<Byte>, label: String): Array<Byte> {
+func decodeBitStringValue(payload: Array<Byte>, label: String): Array<Byte> {
     if (payload.size == 0) {
         throw CryptoException(ParseError, "${label} BIT STRING payload is empty")
     }
@@ -1674,7 +1757,7 @@ private func decodeBitStringValue(payload: Array<Byte>, label: String): Array<By
     payload[1..]
 }
 
-private func parsePositiveInteger(encoded: Array<Byte>, label: String): Array<Byte> {
+func parsePositiveInteger(encoded: Array<Byte>, label: String): Array<Byte> {
     if (encoded.size == 0) {
         throw CryptoException(ParseError, "${label} INTEGER is empty")
     }
@@ -1691,7 +1774,7 @@ private func parsePositiveInteger(encoded: Array<Byte>, label: String): Array<By
     trimmed
 }
 
-private func parseName(element: DerElement): X509Name {
+func parseName(element: DerElement): X509Name {
     let attrs = ArrayList<X509NameAttribute>()
     let nameReader = DerReader(element.value)
     while (nameReader.hasRemaining()) {
@@ -1932,7 +2015,7 @@ private func decodeAttributeValue(tag: Int64, encoded: Array<Byte>): String {
     "0x${bytesToHexLower(encoded)}"
 }
 
-private func encodeCommonName(commonName: String): Array<Byte> {
+func encodeCommonName(commonName: String): Array<Byte> {
     let oid = derWrap(DER_TAG_OID, encodeOid(X509_OID_COMMON_NAME))
     let value = derWrap(DER_TAG_UTF8_STRING, commonName.toArray())
 
@@ -1941,13 +2024,13 @@ private func encodeCommonName(commonName: String): Array<Byte> {
     derWrap(DER_TAG_SEQUENCE, rdn)
 }
 
-private func encodeValidity(notBefore: String, notAfter: String): Array<Byte> {
+func encodeValidity(notBefore: String, notAfter: String): Array<Byte> {
     let nb = encodeTime(notBefore)
     let na = encodeTime(notAfter)
     derWrap(DER_TAG_SEQUENCE, concatBytes(nb, na))
 }
 
-private func encodeTime(text: String): Array<Byte> {
+func encodeTime(text: String): Array<Byte> {
     if (isUtcTime(text)) {
         return derWrap(DER_TAG_UTC_TIME, text.toArray())
     }
@@ -1957,7 +2040,7 @@ private func encodeTime(text: String): Array<Byte> {
     throw CryptoException(InvalidArgument, "invalid X509 time format: ${text}")
 }
 
-private func encodeAlgorithmIdentifier(oid: String, withNullParam!: Bool = true): Array<Byte> {
+func encodeAlgorithmIdentifier(oid: String, withNullParam!: Bool = true): Array<Byte> {
     let list = ArrayList<Byte>()
     appendBytes(list, derWrap(DER_TAG_OID, encodeOid(oid)))
     if (withNullParam) {
@@ -1994,6 +2077,16 @@ private func encodeEcSubjectPublicKeyInfo(publicKey: EcPublicKey): Array<Byte> {
     derWrap(DER_TAG_SEQUENCE, list.toArray())
 }
 
+func encodeSm2SubjectPublicKeyInfo(publicKey: Sm2PublicKey): Array<Byte> {
+    let algorithmParts = ArrayList<Byte>()
+    appendBytes(algorithmParts, derWrap(DER_TAG_OID, encodeOid(X509_OID_EC_PUBLIC_KEY)))
+    appendBytes(algorithmParts, derWrap(DER_TAG_OID, encodeOid(X509_OID_SM2)))
+    let parts = ArrayList<Byte>()
+    appendBytes(parts, derWrap(DER_TAG_SEQUENCE, algorithmParts.toArray()))
+    appendBytes(parts, encodeBitString(sm2PublicKeyToUncompressed(publicKey)))
+    derWrap(DER_TAG_SEQUENCE, parts.toArray())
+}
+
 private func encodeEcPublicKeyAlgorithmIdentifier(curve: NamedCurve): Array<Byte> {
     let list = ArrayList<Byte>()
     appendBytes(list, derWrap(DER_TAG_OID, encodeOid(X509_OID_EC_PUBLIC_KEY)))
@@ -2015,7 +2108,7 @@ private func encodeRsaPublicKey(publicKey: RsaPublicKey): Array<Byte> {
     derWrap(DER_TAG_SEQUENCE, concatBytes(modulus, exponent))
 }
 
-private func encodeExtensionsForSelfSigned(keyUsageMask: Int64): Array<Byte> {
+func encodeExtensionsForSelfSigned(keyUsageMask: Int64): Array<Byte> {
     if (keyUsageMask == 0) {
         return []
     }
@@ -2067,7 +2160,7 @@ private func encodeKeyUsageBitString(mask: Int64): Array<Byte> {
     encodeBitString(bits, unusedBits: unusedBits)
 }
 
-private func encodeBitString(data: Array<Byte>, unusedBits!: Int64 = 0): Array<Byte> {
+func encodeBitString(data: Array<Byte>, unusedBits!: Int64 = 0): Array<Byte> {
     if (unusedBits < 0 || unusedBits > 7) {
         throw CryptoException(InvalidArgument, "BIT STRING unused bits must be 0..7")
     }
@@ -2077,7 +2170,7 @@ private func encodeBitString(data: Array<Byte>, unusedBits!: Int64 = 0): Array<B
     derWrap(DER_TAG_BIT_STRING, payload)
 }
 
-private func encodePositiveInteger(raw: Array<Byte>): Array<Byte> {
+func encodePositiveInteger(raw: Array<Byte>): Array<Byte> {
     let magnitude = trimLeadingZeroBytes(raw)
     if (magnitude.size == 0) {
         return derWrap(DER_TAG_INTEGER, [UInt8(0)])
@@ -2092,7 +2185,7 @@ private func encodePositiveInteger(raw: Array<Byte>): Array<Byte> {
     derWrap(DER_TAG_INTEGER, magnitude)
 }
 
-private func encodeIntegerFromInt(value: Int64): Array<Byte> {
+func encodeIntegerFromInt(value: Int64): Array<Byte> {
     if (value < 0) {
         throw CryptoException(InvalidArgument, "DER INTEGER helper supports only non-negative values")
     }
@@ -2630,6 +2723,38 @@ private func decodeEcPublicKeyFromSpki(spkiDer: Array<Byte>): EcPublicKey {
     EcPublicKey(curve, x, y)
 }
 
+func decodeSm2PublicKeyFromSpki(spkiDer: Array<Byte>): Sm2PublicKey {
+    let spkiElem = derReadSingleElement(spkiDer, "X509 SM2 SubjectPublicKeyInfo")
+    if (spkiElem.tag != DER_TAG_SEQUENCE) {
+        throw CryptoException(ParseError, "SM2 SubjectPublicKeyInfo must be SEQUENCE")
+    }
+    let reader = DerReader(spkiElem.value)
+    let algElem = reader.readElement("SM2 SubjectPublicKeyInfo.algorithm", expectedTag: DER_TAG_SEQUENCE)
+    let keyElem = reader.readElement("SM2 SubjectPublicKeyInfo.subjectPublicKey", expectedTag: DER_TAG_BIT_STRING)
+    if (reader.hasRemaining()) {
+        throw CryptoException(ParseError, "SM2 SubjectPublicKeyInfo contains trailing bytes")
+    }
+
+    let algReader = DerReader(algElem.value)
+    let algOidElem = algReader.readElement("SM2 SubjectPublicKeyInfo.algorithm OID", expectedTag: DER_TAG_OID)
+    let algOid = decodeOid(algOidElem.value, "SM2 SubjectPublicKeyInfo.algorithm OID")
+    if (algOid == X509_OID_EC_PUBLIC_KEY) {
+        let curveOidElem = algReader.readElement("SM2 SubjectPublicKeyInfo.curve OID", expectedTag: DER_TAG_OID)
+        let curveOid = decodeOid(curveOidElem.value, "SM2 SubjectPublicKeyInfo.curve OID")
+        if (curveOid != X509_OID_SM2) {
+            throw CryptoException(Unsupported, "EC SubjectPublicKeyInfo curve is not curveSM2")
+        }
+    } else if (algOid != X509_OID_SM2) {
+        throw CryptoException(Unsupported, "SubjectPublicKeyInfo algorithm is not SM2")
+    }
+    if (algReader.hasRemaining()) {
+        throw CryptoException(ParseError, "SM2 SubjectPublicKeyInfo.algorithm has trailing bytes")
+    }
+    sm2PublicKeyFromUncompressed(
+        decodeBitStringValue(keyElem.value, "SM2 SubjectPublicKeyInfo.subjectPublicKey")
+    )
+}
+
 private func decodeRsaPrivateKeyPkcs1(pkcs1Der: Array<Byte>): RsaPrivateKey {
     let keyElem = derReadSingleElement(pkcs1Der, "RSAPrivateKey")
     if (keyElem.tag != DER_TAG_SEQUENCE) {
@@ -2777,7 +2902,7 @@ private func fieldByteLengthForCurve(curve: NamedCurve): Int64 {
     }
 }
 
-private func decodeEcdsaSignature(signatureDer: Array<Byte>): (BigNum, BigNum) {
+func decodeEcdsaSignature(signatureDer: Array<Byte>): (BigNum, BigNum) {
     let sigElem = derReadSingleElement(signatureDer, "ECDSA signature")
     if (sigElem.tag != DER_TAG_SEQUENCE) {
         throw CryptoException(ParseError, "ECDSA signature must be DER SEQUENCE")
@@ -2794,7 +2919,7 @@ private func decodeEcdsaSignature(signatureDer: Array<Byte>): (BigNum, BigNum) {
     (r, s)
 }
 
-private func encodeEcdsaSignatureDer(r: BigNum, s: BigNum): Array<Byte> {
+func encodeEcdsaSignatureDer(r: BigNum, s: BigNum): Array<Byte> {
     let encodedR = encodePositiveInteger(r.toBytesBE())
     let encodedS = encodePositiveInteger(s.toBytesBE())
     derWrap(DER_TAG_SEQUENCE, concatBytes(encodedR, encodedS))
@@ -2997,7 +3122,7 @@ private func cloneAuthorityKeyIdentifier(value: ?X509AuthorityKeyIdentifier): ?X
     throw CryptoException(ParseError, "authorityKeyIdentifier clone failed")
 }
 
-private func isValidX509Time(text: String): Bool {
+func isValidX509Time(text: String): Bool {
     let utcTime = isUtcTime(text)
     let generalizedTime = isGeneralizedTime(text)
     utcTime || generalizedTime
