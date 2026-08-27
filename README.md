@@ -35,7 +35,7 @@
 | RSA 与封装 | RSA、PKCS#1 v1.5、PSS、KEM（储备） | RSA-KEM/ECDH-KEM 不等于 ML-KEM/PQC |
 | 大数 | BigNum 与大数兼容层 | 依赖标准库 BigInt，不是恒定时间大数后端 |
 | 证书 | X.509 / PEM / trust material | 解析、链验证与显式信任材料；非完整 WebPKI/原生系统信任库 |
-| TLS | TLS 1.2 / TLS 1.3 握手构件、record、session、RFC 8998 国密 profile 与 ClientHello profile | 本地协议流测试，不等于浏览器/OpenSSL/curl 在线互操作 |
+| TLS | TLS 1.2 / TLS 1.3 握手构件、record、session、RFC 8998 国密 profile 与 ClientHello profile；TLS 1.3 AES-GCM/ChaCha20-Poly1305 record 使用序列化 5 字节 header 作为 AAD | 独立 AEAD 复算与本地协议流测试，不等于浏览器/OpenSSL/curl 在线互操作 |
 | 国密传输协议 | TLCP / DTLCP 1.1：四套 SM2/SM3/SM4 密码组、双证书、静态 ECC/SM2 ECDHE、CBC/GCM record、数据报 replay/分片/重传构件 | 固定 openHiTLS 语义的库内端到端闭环；不声明外部线上互操作或网络产品完成 |
 | SSH | SSH transport helpers、KEX、packet protection 与 host verification | 无外部 OpenSSH 全流程互操作声明 |
 | QUIC | QUIC v1/v2 Initial、显式 AEAD、Header Protection、Retry integrity | 包保护构件，不包含 QUIC transport 或 HTTP/3 |
@@ -49,6 +49,11 @@
 当前覆盖 `TLS_AES_128_GCM_SHA256`、`TLS_AES_256_GCM_SHA384`、`TLS_CHACHA20_POLY1305_SHA256`，以及 RFC 8998 的 `TLS_SM4_GCM_SM3` / `TLS_SM4_CCM_SM3`、`curveSM2` 与 `sm2sig_sm3`。HTTP X25519 ClientHello 会优先携带 `TLS_AES_256_GCM_SHA384`。
 
 当前不声明 `X25519MLKEM768` key share，也不把本地 handshake/record 测试写成浏览器、OpenSSL 或 curl 线上互通成功。
+
+TLS 1.3 AES-GCM 与 ChaCha20-Poly1305 记录层认证线上序列化的 5 字节
+`TLSCiphertext` header；最大密文界限包含 `TLSInnerPlaintext` content-type
+字节和 16 字节 AEAD tag。回归测试以独立 AEAD 调用复算密文/tag，避免同一
+seal/open 实现的自互通掩盖 AAD 偏差。
 
 PSK 除调用方显式提供高熵密钥并验证 binder 的低层路径外，现提供受限的
 单进程 opaque ticket owner：wire ticket 仅为 CSPRNG lookup label，并覆盖

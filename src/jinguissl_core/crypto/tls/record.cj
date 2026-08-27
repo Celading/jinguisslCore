@@ -11,7 +11,8 @@ import jinguissl_core.crypto.utils.secureCopyInto
 public let TLS_RECORD_HEADER_LEN: Int64 = 5
 public let TLS_MAX_PLAINTEXT_LEN: Int64 = 16384
 public let TLS_AEAD_TAG_LEN: Int64 = 16
-public let TLS_MAX_CIPHERTEXT_LEN: Int64 = TLS_MAX_PLAINTEXT_LEN + TLS_AEAD_TAG_LEN
+// TLS 1.3 adds one inner content-type byte before the fixed AEAD tag.
+public let TLS_MAX_CIPHERTEXT_LEN: Int64 = TLS_MAX_PLAINTEXT_LEN + 1 + TLS_AEAD_TAG_LEN
 
 public enum TlsAeadAlgorithm <: Equatable<TlsAeadAlgorithm> & ToString {
     | AES_GCM
@@ -270,11 +271,13 @@ public class TlsAeadRecordLayer {
     var _writeTagScratch: Array<Byte> = Array<Byte>(TLS_AEAD_TAG_LEN, repeat: 0)
     var _writeNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _writeAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _writeTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
     var _readCipherScratch: Array<Byte> = []
     var _readPlainScratch: Array<Byte> = []
     var _readTagScratch: Array<Byte> = Array<Byte>(TLS_AEAD_TAG_LEN, repeat: 0)
     var _readNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _readAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _readTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
 
     var _writeSequence: Int64 = 0
     var _readSequence: Int64 = 0
@@ -349,7 +352,7 @@ public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byt
             secureCopyInto(plaintext, innerPlaintext)
             innerPlaintext[plaintext.size] = contentTypeToWire(contentType)
             buildNonceInto(_writeIv, seq, _writeNonceScratch)
-            buildTls13AadInto(innerPlainLen + TLS_AEAD_TAG_LEN, _writeAadScratch)
+            buildTls13AadInto(innerPlainLen + TLS_AEAD_TAG_LEN, _writeTls13AadScratch)
             _writeCipherScratch = ensureTlsScratchSize(_writeCipherScratch, innerPlainLen)
             aesGcmEncryptIntoWithContext(
                 _writeContext,
@@ -357,7 +360,7 @@ public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byt
                 innerPlaintext,
                 _writeCipherScratch,
                 _writeTagScratch,
-                aad: _writeAadScratch,
+                aad: _writeTls13AadScratch,
                 tagLen: TLS_AEAD_TAG_LEN
             )
             // Encode with opaque_type=ApplicationData and legacy record_version=0x0303
@@ -417,7 +420,7 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
 
         if (version == TLS1_3) {
             // TLS 1.3 AAD: opaque_type || legacy_record_version (0x0303) || length
-            buildTls13AadInto(record.fragment.size, _readAadScratch)
+            buildTls13AadInto(record.fragment.size, _readTls13AadScratch)
         } else {
             buildAadInto(seq, record.header.contentType, record.header.version, cipherLen, _readAadScratch)
         }
@@ -428,7 +431,7 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
             _readCipherScratch,
             _readTagScratch,
             _readPlainScratch,
-            aad: _readAadScratch
+            aad: if (version == TLS1_3) { _readTls13AadScratch } else { _readAadScratch }
         )
 
         if (version == TLS1_3) {
@@ -505,8 +508,10 @@ public class TlsChacha20Poly1305RecordLayer {
     let _readIv: Array<Byte>
     var _writeNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _writeAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _writeTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
     var _readNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _readAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _readTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
 
     var _writeSequence: Int64 = 0
     var _readSequence: Int64 = 0
@@ -574,12 +579,12 @@ public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byt
             secureCopyInto(plaintext, innerPlaintext)
             innerPlaintext[plaintext.size] = contentTypeToWire(contentType)
             buildNonceInto(_writeIv, seq, _writeNonceScratch)
-            buildTls13AadInto(innerPlainLen + CHACHA20_POLY1305_TAG_LEN, _writeAadScratch)
+            buildTls13AadInto(innerPlainLen + CHACHA20_POLY1305_TAG_LEN, _writeTls13AadScratch)
             let (ciphertext, tag) = chacha20Poly1305EncryptWithContext(
                 _writeContext,
                 _writeNonceScratch,
                 innerPlaintext,
-                aad: _writeAadScratch
+                aad: _writeTls13AadScratch
             )
             let payload = Array<Byte>(ciphertext.size + tag.size, repeat: 0)
             secureCopyInto(ciphertext, payload)
@@ -625,7 +630,7 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
         buildNonceInto(_readIv, seq, _readNonceScratch)
 
         if (version == TLS1_3) {
-            buildTls13AadInto(record.fragment.size, _readAadScratch)
+            buildTls13AadInto(record.fragment.size, _readTls13AadScratch)
         } else {
             buildAadInto(seq, record.header.contentType, record.header.version, cipherLen, _readAadScratch)
         }
@@ -635,7 +640,7 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
             _readNonceScratch,
             ciphertext,
             tag,
-            aad: _readAadScratch
+            aad: if (version == TLS1_3) { _readTls13AadScratch } else { _readAadScratch }
         )
 
         if (version == TLS1_3) {
@@ -1111,8 +1116,8 @@ private func buildAadInto(
  * RFC 8446 §5.2: additional_data = TLSCiphertext.opaque_type ||
  *                  TLSCiphertext.legacy_record_version || TLSCiphertext.length
  * where opaque_type is always ApplicationData (23) for protected records,
- * legacy_record_version is 0x0303, and length is the ciphertext length
- * (inner plaintext length, excluding the tag).
+ * legacy_record_version is 0x0303, and length is the complete serialized
+ * TLSCiphertext.encrypted_record length, including AEAD expansion.
  */
 private func buildTls13AadInto(
     ciphertextLen: Int64,
@@ -1121,7 +1126,7 @@ private func buildTls13AadInto(
     if (outAad.size < 5) {
         throw CryptoException(InvalidArgument, "TLS1.3 AEAD additional data buffer must be at least 5 bytes")
     }
-    if (ciphertextLen <= TLS_AEAD_TAG_LEN || ciphertextLen > TLS_MAX_CIPHERTEXT_LEN + 1) {
+    if (ciphertextLen <= TLS_AEAD_TAG_LEN || ciphertextLen > TLS_MAX_CIPHERTEXT_LEN) {
         throw CryptoException(OutOfBounds, "TLS1.3 AEAD ciphertext length out of range")
     }
     // opaque_type = ApplicationData (23)
@@ -1129,7 +1134,7 @@ private func buildTls13AadInto(
     // legacy_record_version = 0x0303
     outAad[1] = UInt8(0x03)
     outAad[2] = UInt8(0x03)
-    // length (inner plaintext length)
+    // length of the serialized TLSCiphertext.encrypted_record
     outAad[3] = UInt8((ciphertextLen >> 8) & 0xff)
     outAad[4] = UInt8(ciphertextLen & 0xff)
 }
