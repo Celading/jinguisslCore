@@ -2,6 +2,7 @@ package jinguissl_core.crypto.digest
 
 import std.collection.ArrayList
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
+import jinguissl_core.crypto.sm3.sm3
 import jinguissl_core.crypto.utils.{bytesToUInt32BE, bytesToUInt32LE, secureCopyInto, uInt32ToBytesBE, uInt32ToBytesLE}
 
 public enum HashAlgorithm <: Equatable<HashAlgorithm> & ToString {
@@ -12,6 +13,7 @@ public enum HashAlgorithm <: Equatable<HashAlgorithm> & ToString {
     | SHA256
     | SHA384
     | SHA512
+    | SM3
 
     public operator func ==(right: HashAlgorithm): Bool {
         ordinalValue() == right.ordinalValue()
@@ -28,6 +30,7 @@ public enum HashAlgorithm <: Equatable<HashAlgorithm> & ToString {
             case SHA256 => 2
             case SHA384 => 3
             case SHA512 => 4
+            case SM3 => 5
         }
     }
 
@@ -38,6 +41,7 @@ public enum HashAlgorithm <: Equatable<HashAlgorithm> & ToString {
             case SHA256 => "SHA-256"
             case SHA384 => "SHA-384"
             case SHA512 => "SHA-512"
+            case SM3 => "SM3"
         }
     }
 }
@@ -49,6 +53,7 @@ public func hash(algorithm: HashAlgorithm, data: Array<Byte>): Array<Byte> {
         case SHA256 => sha256(data)
         case SHA384 => sha384(data)
         case SHA512 => sha512(data)
+        case SM3 => sm3(data)
     }
 }
 
@@ -384,6 +389,7 @@ private func digestLength(algorithm: HashAlgorithm): Int64 {
         case SHA256 => 32
         case SHA384 => 48
         case SHA512 => 64
+        case SM3 => 32
     }
 }
 
@@ -490,7 +496,7 @@ private func u64Word(hi: UInt32, lo: UInt32): UInt64 {
 
 public func hmac(algorithm: HashAlgorithm, key: Array<Byte>, data: Array<Byte>): Array<Byte> {
     let blockSize = match (algorithm) {
-        case MD5 | SHA1 | SHA256 => 64
+        case MD5 | SHA1 | SHA256 | SM3 => 64
         case SHA384 | SHA512 => 128
     }
 

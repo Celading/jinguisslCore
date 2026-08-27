@@ -12,12 +12,14 @@ public class CoreDigestTestSuite {
         @Assert(HashAlgorithm.SHA256.toString(), "SHA-256")
         @Assert(HashAlgorithm.SHA384.toString(), "SHA-384")
         @Assert(HashAlgorithm.SHA512.toString(), "SHA-512")
+        @Assert(HashAlgorithm.SM3.toString(), "SM3")
 
         @Assert(HashAlgorithm.MD5.ordinalValue(), 0)
         @Assert(HashAlgorithm.SHA1.ordinalValue(), 1)
         @Assert(HashAlgorithm.SHA256.ordinalValue(), 2)
         @Assert(HashAlgorithm.SHA384.ordinalValue(), 3)
         @Assert(HashAlgorithm.SHA512.ordinalValue(), 4)
+        @Assert(HashAlgorithm.SM3.ordinalValue(), 5)
     }
 
     @TestCase
@@ -76,6 +78,7 @@ public class CoreDigestTestSuite {
         @Assert(bytesToHexLower(hash(HashAlgorithm.SHA256, empty)), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
         @Assert(bytesToHexLower(hash(HashAlgorithm.SHA384, empty)), "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b")
         @Assert(bytesToHexLower(hash(HashAlgorithm.SHA512, empty)), "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e")
+        @Assert(bytesToHexLower(hash(HashAlgorithm.SM3, empty)), "1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b")
     }
 
     @TestCase
@@ -110,6 +113,20 @@ public class CoreDigestTestSuite {
         @Assert(hash(HashAlgorithm.SHA256, [0x00]).size, 32)
         @Assert(hash(HashAlgorithm.SHA384, [0x00]).size, 48)
         @Assert(hash(HashAlgorithm.SHA512, [0x00]).size, 64)
+        @Assert(hash(HashAlgorithm.SM3, [0x00]).size, 32)
+        }
+
+        @TestCase
+        public func testGenericHmacAndHkdfSm3Routes(): Unit {
+            let key = "key".toArray()
+            let data = "abc".toArray()
+            @Assert(
+                bytesToHexLower(hmac(HashAlgorithm.SM3, key, data)),
+                "28e63256e7c5a087b1f073265dc53092163f7b82729735d06f28f10af9d52393"
+            )
+            let prk = hkdfExtract(HashAlgorithm.SM3, [0x01, 0x02], [0x03, 0x04])
+            @Assert(prk.size, 32)
+            @Assert(hkdfExpand(HashAlgorithm.SM3, prk, "tls13-sm3".toArray(), 42).size, 42)
         }
 
         @TestCase

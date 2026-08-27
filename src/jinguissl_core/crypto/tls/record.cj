@@ -5,16 +5,20 @@ import jinguissl_core.crypto.aes.{AesEngine, AesEngineKind, AesGcmContext, aesGc
 import jinguissl_core.crypto.chacha20.{CHACHA20_POLY1305_TAG_LEN, Chacha20Poly1305Context, chacha20Poly1305DecryptWithContext, chacha20Poly1305EncryptWithContext, chacha20Poly1305NewContext}
 import jinguissl_core.crypto.compliance.{FipsProfile, TlsVersion}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
+import jinguissl_core.crypto.sm4.{sm4CcmDecrypt, sm4CcmEncrypt, sm4GcmDecrypt, sm4GcmEncrypt}
 import jinguissl_core.crypto.utils.secureCopyInto
 
 public let TLS_RECORD_HEADER_LEN: Int64 = 5
 public let TLS_MAX_PLAINTEXT_LEN: Int64 = 16384
 public let TLS_AEAD_TAG_LEN: Int64 = 16
-public let TLS_MAX_CIPHERTEXT_LEN: Int64 = TLS_MAX_PLAINTEXT_LEN + TLS_AEAD_TAG_LEN
+// TLS 1.3 adds one inner content-type byte before the fixed AEAD tag.
+public let TLS_MAX_CIPHERTEXT_LEN: Int64 = TLS_MAX_PLAINTEXT_LEN + 1 + TLS_AEAD_TAG_LEN
 
 public enum TlsAeadAlgorithm <: Equatable<TlsAeadAlgorithm> & ToString {
     | AES_GCM
     | CHACHA20_POLY1305
+    | SM4_GCM
+    | SM4_CCM
 
     public operator func ==(right: TlsAeadAlgorithm): Bool {
         ordinalValue() == right.ordinalValue()
@@ -28,6 +32,8 @@ public enum TlsAeadAlgorithm <: Equatable<TlsAeadAlgorithm> & ToString {
         match (this) {
             case AES_GCM => 0
             case CHACHA20_POLY1305 => 1
+            case SM4_GCM => 2
+            case SM4_CCM => 3
         }
     }
 
@@ -35,6 +41,8 @@ public enum TlsAeadAlgorithm <: Equatable<TlsAeadAlgorithm> & ToString {
         match (this) {
             case AES_GCM => "AES-GCM"
             case CHACHA20_POLY1305 => "CHACHA20-POLY1305"
+            case SM4_GCM => "SM4-GCM"
+            case SM4_CCM => "SM4-CCM"
         }
     }
 }
@@ -263,11 +271,13 @@ public class TlsAeadRecordLayer {
     var _writeTagScratch: Array<Byte> = Array<Byte>(TLS_AEAD_TAG_LEN, repeat: 0)
     var _writeNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _writeAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _writeTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
     var _readCipherScratch: Array<Byte> = []
     var _readPlainScratch: Array<Byte> = []
     var _readTagScratch: Array<Byte> = Array<Byte>(TLS_AEAD_TAG_LEN, repeat: 0)
     var _readNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _readAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _readTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
 
     var _writeSequence: Int64 = 0
     var _readSequence: Int64 = 0
@@ -342,7 +352,7 @@ public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byt
             secureCopyInto(plaintext, innerPlaintext)
             innerPlaintext[plaintext.size] = contentTypeToWire(contentType)
             buildNonceInto(_writeIv, seq, _writeNonceScratch)
-            buildTls13AadInto(innerPlainLen, _writeAadScratch)
+            buildTls13AadInto(innerPlainLen + TLS_AEAD_TAG_LEN, _writeTls13AadScratch)
             _writeCipherScratch = ensureTlsScratchSize(_writeCipherScratch, innerPlainLen)
             aesGcmEncryptIntoWithContext(
                 _writeContext,
@@ -350,7 +360,7 @@ public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byt
                 innerPlaintext,
                 _writeCipherScratch,
                 _writeTagScratch,
-                aad: _writeAadScratch,
+                aad: _writeTls13AadScratch,
                 tagLen: TLS_AEAD_TAG_LEN
             )
             // Encode with opaque_type=ApplicationData and legacy record_version=0x0303
@@ -410,7 +420,7 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
 
         if (version == TLS1_3) {
             // TLS 1.3 AAD: opaque_type || legacy_record_version (0x0303) || length
-            buildTls13AadInto(cipherLen, _readAadScratch)
+            buildTls13AadInto(record.fragment.size, _readTls13AadScratch)
         } else {
             buildAadInto(seq, record.header.contentType, record.header.version, cipherLen, _readAadScratch)
         }
@@ -421,14 +431,13 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
             _readCipherScratch,
             _readTagScratch,
             _readPlainScratch,
-            aad: _readAadScratch
+            aad: if (version == TLS1_3) { _readTls13AadScratch } else { _readAadScratch }
         )
 
         if (version == TLS1_3) {
             // TLS 1.3 inner plaintext: last byte is the actual content type
-            let actualContentType = contentTypeFromWire(_readPlainScratch[_readPlainScratch.size - 1])
-            let plainLen = _readPlainScratch.size - 1
-            TlsPlainRecord(actualContentType, TLS1_3, _readPlainScratch[..plainLen])
+            let (actualContentType, plaintext) = tls13DecodeInnerPlaintext(_readPlainScratch)
+            TlsPlainRecord(actualContentType, TLS1_3, plaintext)
         } else {
             TlsPlainRecord(record.header.contentType, record.header.version, _readPlainScratch)
         }
@@ -499,8 +508,10 @@ public class TlsChacha20Poly1305RecordLayer {
     let _readIv: Array<Byte>
     var _writeNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _writeAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _writeTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
     var _readNonceScratch: Array<Byte> = Array<Byte>(12, repeat: 0)
     var _readAadScratch: Array<Byte> = Array<Byte>(13, repeat: 0)
+    var _readTls13AadScratch: Array<Byte> = Array<Byte>(5, repeat: 0)
 
     var _writeSequence: Int64 = 0
     var _readSequence: Int64 = 0
@@ -568,12 +579,12 @@ public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byt
             secureCopyInto(plaintext, innerPlaintext)
             innerPlaintext[plaintext.size] = contentTypeToWire(contentType)
             buildNonceInto(_writeIv, seq, _writeNonceScratch)
-            buildTls13AadInto(innerPlainLen, _writeAadScratch)
+            buildTls13AadInto(innerPlainLen + CHACHA20_POLY1305_TAG_LEN, _writeTls13AadScratch)
             let (ciphertext, tag) = chacha20Poly1305EncryptWithContext(
                 _writeContext,
                 _writeNonceScratch,
                 innerPlaintext,
-                aad: _writeAadScratch
+                aad: _writeTls13AadScratch
             )
             let payload = Array<Byte>(ciphertext.size + tag.size, repeat: 0)
             secureCopyInto(ciphertext, payload)
@@ -619,7 +630,7 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
         buildNonceInto(_readIv, seq, _readNonceScratch)
 
         if (version == TLS1_3) {
-            buildTls13AadInto(cipherLen, _readAadScratch)
+            buildTls13AadInto(record.fragment.size, _readTls13AadScratch)
         } else {
             buildAadInto(seq, record.header.contentType, record.header.version, cipherLen, _readAadScratch)
         }
@@ -629,13 +640,13 @@ public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
             _readNonceScratch,
             ciphertext,
             tag,
-            aad: _readAadScratch
+            aad: if (version == TLS1_3) { _readTls13AadScratch } else { _readAadScratch }
         )
 
         if (version == TLS1_3) {
             // TLS 1.3 inner plaintext: last byte is the actual content type
-            let actualContentType = contentTypeFromWire(plaintext[plaintext.size - 1])
-            TlsPlainRecord(actualContentType, TLS1_3, plaintext[..plaintext.size - 1])
+            let (actualContentType, innerPlaintext) = tls13DecodeInnerPlaintext(plaintext)
+            TlsPlainRecord(actualContentType, TLS1_3, innerPlaintext)
         } else {
             TlsPlainRecord(record.header.contentType, record.header.version, plaintext)
         }
@@ -694,6 +705,131 @@ public func openAndReassemble(
         let seq = _readSequence
         _readSequence += 1
         seq
+    }
+}
+
+/** RFC 8998 TLS 1.3 record protection for SM4-GCM and SM4-CCM. */
+public class TlsSm4RecordLayer {
+    public let algorithm: TlsAeadAlgorithm
+
+    let _writeKey: Array<Byte>
+    let _readKey: Array<Byte>
+    let _writeIv: Array<Byte>
+    let _readIv: Array<Byte>
+    var _writeSequence: Int64 = 0
+    var _readSequence: Int64 = 0
+
+    public init(
+        algorithm: TlsAeadAlgorithm,
+        writeKey: Array<Byte>,
+        writeIv: Array<Byte>,
+        readKey!: Array<Byte> = [],
+        readIv!: Array<Byte> = []
+    ) {
+        if (algorithm != SM4_GCM && algorithm != SM4_CCM) {
+            throw CryptoException(InvalidArgument, "TLS1.3 SM4 record layer requires SM4-GCM or SM4-CCM")
+        }
+        if (writeKey.size != 16) {
+            throw CryptoException(InvalidArgument, "RFC8998 SM4 write key must be 16 bytes")
+        }
+        requireFixedIv(writeIv, "SM4 write IV")
+        let inboundKey = if (readKey.size == 0) { writeKey } else { readKey }
+        let inboundIv = if (readIv.size == 0) { writeIv } else { readIv }
+        if (inboundKey.size != 16) {
+            throw CryptoException(InvalidArgument, "RFC8998 SM4 read key must be 16 bytes")
+        }
+        requireFixedIv(inboundIv, "SM4 read IV")
+        this.algorithm = algorithm
+        this._writeKey = writeKey.clone()
+        this._readKey = inboundKey.clone()
+        this._writeIv = writeIv.clone()
+        this._readIv = inboundIv.clone()
+    }
+
+    public prop writeSequence: Int64 { get() { _writeSequence } }
+
+    public prop readSequence: Int64 { get() { _readSequence } }
+
+    public func resetSequences(): Unit {
+        _writeSequence = 0
+        _readSequence = 0
+    }
+
+    /**
+     * Seal one RFC 8998 TLS 1.3 record.
+     *
+     * @throws CryptoException 当输入或记录状态无效时抛出
+     */
+    public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
+        if (plaintext.size > TLS_MAX_PLAINTEXT_LEN) {
+            throw CryptoException(OutOfBounds, "TLS1.3 SM4 plaintext exceeds max fragment size")
+        }
+        let sequence = nextWriteSequence()
+        let inner = Array<Byte>(plaintext.size + 1, repeat: UInt8(0))
+        secureCopyInto(plaintext, inner)
+        inner[plaintext.size] = contentTypeToWire(contentType)
+        let nonce = buildNonce(_writeIv, sequence)
+        let aad = Array<Byte>(5, repeat: UInt8(0))
+        buildTls13AadInto(inner.size + TLS_AEAD_TAG_LEN, aad)
+        let (ciphertext, tag) = if (algorithm == SM4_GCM) {
+            sm4GcmEncrypt(_writeKey, nonce, inner, aad: aad, tagLen: TLS_AEAD_TAG_LEN)
+        } else {
+            sm4CcmEncrypt(_writeKey, nonce, inner, aad: aad, tagLen: TLS_AEAD_TAG_LEN)
+        }
+        tlsEncodeRecordFromCipherAndTag(
+            ApplicationData,
+            TLS1_2,
+            ciphertext,
+            tag,
+            TLS_AEAD_TAG_LEN
+        )
+    }
+
+    /**
+     * Open one RFC 8998 TLS 1.3 record after authenticating its header and tag.
+     *
+     * @throws CryptoException 当记录或认证无效时抛出
+     */
+    public func open(encodedRecord: Array<Byte>): TlsPlainRecord {
+        let record = tlsDecodeRecord(encodedRecord)
+        if (record.header.contentType != ApplicationData) {
+            throw CryptoException(ParseError, "TLS1.3 protected record outer type must be application_data")
+        }
+        if (record.fragment.size <= TLS_AEAD_TAG_LEN) {
+            throw CryptoException(ParseError, "TLS1.3 SM4 record is too short")
+        }
+        let sequence = nextReadSequence()
+        let cipherLen = record.fragment.size - TLS_AEAD_TAG_LEN
+        let ciphertext = record.fragment[..cipherLen]
+        let tag = record.fragment[cipherLen..]
+        let nonce = buildNonce(_readIv, sequence)
+        let aad = Array<Byte>(5, repeat: UInt8(0))
+        buildTls13AadInto(record.fragment.size, aad)
+        let inner = if (algorithm == SM4_GCM) {
+            sm4GcmDecrypt(_readKey, nonce, ciphertext, tag, aad: aad)
+        } else {
+            sm4CcmDecrypt(_readKey, nonce, ciphertext, tag, aad: aad)
+        }
+        let (actualContentType, plaintext) = tls13DecodeInnerPlaintext(inner)
+        TlsPlainRecord(actualContentType, TLS1_3, plaintext)
+    }
+
+    private func nextWriteSequence(): Int64 {
+        if (_writeSequence == Int64.Max) {
+            throw CryptoException(OutOfBounds, "TLS1.3 SM4 write sequence overflow")
+        }
+        let sequence = _writeSequence
+        _writeSequence += 1
+        sequence
+    }
+
+    private func nextReadSequence(): Int64 {
+        if (_readSequence == Int64.Max) {
+            throw CryptoException(OutOfBounds, "TLS1.3 SM4 read sequence overflow")
+        }
+        let sequence = _readSequence
+        _readSequence += 1
+        sequence
     }
 }
 
@@ -980,27 +1116,42 @@ private func buildAadInto(
  * RFC 8446 §5.2: additional_data = TLSCiphertext.opaque_type ||
  *                  TLSCiphertext.legacy_record_version || TLSCiphertext.length
  * where opaque_type is always ApplicationData (23) for protected records,
- * legacy_record_version is 0x0303, and length is the ciphertext length
- * (inner plaintext length, excluding the tag).
+ * legacy_record_version is 0x0303, and length is the complete serialized
+ * TLSCiphertext.encrypted_record length, including AEAD expansion.
  */
 private func buildTls13AadInto(
-    innerPlainLen: Int64,
+    ciphertextLen: Int64,
     outAad: Array<Byte>
 ): Unit {
     if (outAad.size < 5) {
         throw CryptoException(InvalidArgument, "TLS1.3 AEAD additional data buffer must be at least 5 bytes")
     }
-    if (innerPlainLen < 0 || innerPlainLen > TLS_MAX_PLAINTEXT_LEN + 1) {
-        throw CryptoException(OutOfBounds, "TLS1.3 AEAD inner plaintext length out of range")
+    if (ciphertextLen <= TLS_AEAD_TAG_LEN || ciphertextLen > TLS_MAX_CIPHERTEXT_LEN) {
+        throw CryptoException(OutOfBounds, "TLS1.3 AEAD ciphertext length out of range")
     }
     // opaque_type = ApplicationData (23)
     outAad[0] = UInt8(0x17)
     // legacy_record_version = 0x0303
     outAad[1] = UInt8(0x03)
     outAad[2] = UInt8(0x03)
-    // length (inner plaintext length)
-    outAad[3] = UInt8((innerPlainLen >> 8) & 0xff)
-    outAad[4] = UInt8(innerPlainLen & 0xff)
+    // length of the serialized TLSCiphertext.encrypted_record
+    outAad[3] = UInt8((ciphertextLen >> 8) & 0xff)
+    outAad[4] = UInt8(ciphertextLen & 0xff)
+}
+
+private func tls13DecodeInnerPlaintext(inner: Array<Byte>): (TlsContentType, Array<Byte>) {
+    if (inner.size == 0) {
+        throw CryptoException(ParseError, "TLS1.3 inner plaintext is empty")
+    }
+    var contentTypeOffset = inner.size - 1
+    while (contentTypeOffset >= 0 && inner[contentTypeOffset] == UInt8(0)) {
+        contentTypeOffset -= 1
+    }
+    if (contentTypeOffset < 0) {
+        throw CryptoException(ParseError, "TLS1.3 inner plaintext has no content type")
+    }
+    let contentType = contentTypeFromWire(UInt8(inner[contentTypeOffset]))
+    (contentType, inner[..contentTypeOffset])
 }
 
 private func contentTypeToWire(contentType: TlsContentType): Byte {
