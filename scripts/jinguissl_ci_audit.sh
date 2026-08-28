@@ -118,6 +118,22 @@ check_old_import_roots() {
   fi
 }
 
+check_public_package_root() {
+  if [ ! -f cjpm.toml ]; then
+    return
+  fi
+
+  if ! grep -qE '^[[:space:]]*src-dir[[:space:]]*=[[:space:]]*"src"[[:space:]]*$' cjpm.toml; then
+    fail 'public package root must use src-dir = "src"'
+  fi
+  if [ -e src/jinguissl_core ]; then
+    fail "duplicated physical package root src/jinguissl_core must not exist"
+  fi
+  if [ ! -f src/package.cj ] || ! grep -qE '^[[:space:]]*package[[:space:]]+jinguissl_core[[:space:]]*$' src/package.cj; then
+    fail "src/package.cj must declare the jinguissl_core public root"
+  fi
+}
+
 check_dependency_graph() {
   if [ ! -f cjpm.toml ]; then
     return
@@ -174,6 +190,7 @@ check_local_paths
 check_governance_residue
 check_target_artifacts
 check_old_import_roots
+check_public_package_root
 check_dependency_graph
 check_dependency_lock
 check_toolchain_surface
