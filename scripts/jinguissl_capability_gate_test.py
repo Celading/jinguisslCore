@@ -81,6 +81,14 @@ class CapabilityGateTest(unittest.TestCase):
         )
         self.assertEqual(validate_public_delta(self.root, self.manifest, "HEAD"), [])
 
+    def test_source_root_rename_preserves_public_surface(self) -> None:
+        (self.root / "src/core").mkdir()
+        (self.root / "src/demo.cj").rename(self.root / "src/core/demo.cj")
+        self.manifest["capabilities"][0]["sourceGlobs"] = ["src/core/*.cj"]
+        run_git(self.root, "add", "-A")
+
+        self.assertEqual(validate_public_delta(self.root, self.manifest, "HEAD"), [])
+
     def test_multiline_signature_and_enum_cases_are_public_surface(self) -> None:
         before = """public enum Mode {
     | One
