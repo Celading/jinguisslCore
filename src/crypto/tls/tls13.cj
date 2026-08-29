@@ -1606,17 +1606,21 @@ public func tls13BuildServerHandshakeContextEcdheP256(
         selectedAlpn: selectedAlpn,
         acknowledgeServerName: shouldAckServerName
     )
-    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, serverHello), encryptedExtensions))
+    let helloTranscript = concat(encodedClientHello, serverHello)
+    let helloTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, helloTranscript)
+    let protectedHandshakePrefix = concat(helloTranscript, encryptedExtensions)
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, protectedHandshakePrefix)
     let clientPublicKey = tls13ExtractClientKeyShare(encodedClientHello)
     let firstSecrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite
     )
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
-        transcriptHash,
+        protectedHandshakePrefix,
+        selectedCipherSuite,
         firstSecrets.serverHsTrafficSecret,
         certificatePrivateKeyEcdsa,
         certificatePrivateKeyRsa
@@ -1630,7 +1634,7 @@ public func tls13BuildServerHandshakeContextEcdheP256(
     let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
@@ -1677,17 +1681,21 @@ public func tls13BuildServerHandshakeContextEcdheP384(
         selectedAlpn: selectedAlpn,
         acknowledgeServerName: shouldAckServerName
     )
-    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, serverHello), encryptedExtensions))
+    let helloTranscript = concat(encodedClientHello, serverHello)
+    let helloTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, helloTranscript)
+    let protectedHandshakePrefix = concat(helloTranscript, encryptedExtensions)
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, protectedHandshakePrefix)
     let clientPublicKey = tls13ExtractClientKeyShare(encodedClientHello)
     let firstSecrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite
     )
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
-        transcriptHash,
+        protectedHandshakePrefix,
+        selectedCipherSuite,
         firstSecrets.serverHsTrafficSecret,
         certificatePrivateKeyEcdsa,
         certificatePrivateKeyRsa
@@ -1701,7 +1709,7 @@ public func tls13BuildServerHandshakeContextEcdheP384(
     let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
@@ -1740,17 +1748,21 @@ public func tls13BuildServerHandshakeContextX25519(
         selectedAlpn: selectedAlpn,
         acknowledgeServerName: shouldAckServerName
     )
-    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, serverHello), encryptedExtensions))
+    let helloTranscript = concat(encodedClientHello, serverHello)
+    let helloTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, helloTranscript)
+    let protectedHandshakePrefix = concat(helloTranscript, encryptedExtensions)
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, protectedHandshakePrefix)
     let clientPublicKey = tls13ExtractClientX25519KeyShare(encodedClientHello)
     let firstSecrets = tls13DeriveSecretsFromX25519ForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite
     )
     let authFlight = tls13BuildServerAuthFlightBySigner(
         certChainDer,
-        transcriptHash,
+        protectedHandshakePrefix,
+        selectedCipherSuite,
         firstSecrets.serverHsTrafficSecret,
         certificatePrivateKeyEcdsa,
         certificatePrivateKeyRsa
@@ -1764,11 +1776,10 @@ public func tls13BuildServerHandshakeContextX25519(
     let secrets = tls13DeriveSecretsFromX25519ForCipherSuite(
         serverKeyExchangePrivate,
         clientPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
-
     let flight = Tls13ServerHandshakeFlight(
         serverHello,
         encryptedExtensions,
@@ -1903,7 +1914,10 @@ public func tls13ProcessServerHandshakeFlightEcdheP256(
     }
     let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
     let selectedCipherSuite = serverHello.cipherSuite
-    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
+    let helloTranscript = concat(encodedClientHello, flight.serverHello)
+    let helloTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, helloTranscript)
+    let protectedHandshakePrefix = concat(helloTranscript, flight.encryptedExtensions)
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, protectedHandshakePrefix)
     if (!constantTimeEquals(transcriptHash, flight.transcriptHash)) {
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
@@ -1918,14 +1932,15 @@ public func tls13ProcessServerHandshakeFlightEcdheP256(
     let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         clientKeyExchangePrivate,
         serverPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
     let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
         flight.authFlight,
         policy,
-        transcriptHash,
+        protectedHandshakePrefix,
+        selectedCipherSuite,
         secrets.serverHsTrafficSecret,
         profile
     )
@@ -1956,7 +1971,10 @@ public func tls13ProcessServerHandshakeFlightEcdheP384(
     }
     let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
     let selectedCipherSuite = serverHello.cipherSuite
-    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
+    let helloTranscript = concat(encodedClientHello, flight.serverHello)
+    let helloTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, helloTranscript)
+    let protectedHandshakePrefix = concat(helloTranscript, flight.encryptedExtensions)
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, protectedHandshakePrefix)
     if (!constantTimeEquals(transcriptHash, flight.transcriptHash)) {
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
@@ -1971,14 +1989,15 @@ public func tls13ProcessServerHandshakeFlightEcdheP384(
     let secrets = tls13DeriveSecretsFromEcdheForCipherSuite(
         clientKeyExchangePrivate,
         serverPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
     let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
         flight.authFlight,
         policy,
-        transcriptHash,
+        protectedHandshakePrefix,
+        selectedCipherSuite,
         secrets.serverHsTrafficSecret,
         profile
     )
@@ -2006,7 +2025,10 @@ public func tls13ProcessServerHandshakeFlightX25519(
 ): Tls13ClientHandshakeResult {
     let serverHello = tlsDecodeServerHelloHandshake(flight.serverHello)
     let selectedCipherSuite = serverHello.cipherSuite
-    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, concat(concat(encodedClientHello, flight.serverHello), flight.encryptedExtensions))
+    let helloTranscript = concat(encodedClientHello, flight.serverHello)
+    let helloTranscriptHash = tls13HashForCipherSuite(selectedCipherSuite, helloTranscript)
+    let protectedHandshakePrefix = concat(helloTranscript, flight.encryptedExtensions)
+    let transcriptHash = tls13HashForCipherSuite(selectedCipherSuite, protectedHandshakePrefix)
     if (!constantTimeEquals(transcriptHash, flight.transcriptHash)) {
         throw CryptoException(ParseError, "TLS1.3 transcript hash mismatch in server handshake flight")
     }
@@ -2021,14 +2043,15 @@ public func tls13ProcessServerHandshakeFlightX25519(
     let secrets = tls13DeriveSecretsFromX25519ForCipherSuite(
         clientKeyExchangePrivate,
         serverPublicKey,
-        transcriptHash,
+        helloTranscriptHash,
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
     let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
         flight.authFlight,
         policy,
-        transcriptHash,
+        protectedHandshakePrefix,
+        selectedCipherSuite,
         secrets.serverHsTrafficSecret,
         profile
     )
@@ -3173,55 +3196,103 @@ private func tls13ExtractServerNameFromHello(clientHello: TlsClientHello): Strin
 
 private func tls13BuildServerAuthFlightBySigner(
     certChainDer: Array<Array<Byte>>,
-    transcriptHash: Array<Byte>,
+    protectedHandshakePrefix: Array<Byte>,
+    cipherSuite: Int64,
     serverHsTrafficSecret: Array<Byte>,
     certificatePrivateKeyEcdsa: ?EcPrivateKey,
     certificatePrivateKeyRsa: ?RsaPrivateKey
 ): Tls13AuthFlight {
+    let certificate = tls13BuildCertificateHandshakeFromDerChain(certChainDer)
+    let certificateVerifyTranscriptHash = tls13HashForCipherSuite(
+        cipherSuite,
+        concat(protectedHandshakePrefix, certificate)
+    )
+    var certificateVerify: Array<Byte> = []
     if (let Some(ecdsaKey) <- certificatePrivateKeyEcdsa) {
         if (let Some(_rsaKey) <- certificatePrivateKeyRsa) {
-            throw CryptoException(InvalidArgument, "TLS1.3 server auth flight signer must use exactly one private key")
+            throw CryptoException(
+                InvalidArgument,
+                "TLS1.3 server auth flight signer must use exactly one private key"
+            )
         }
-        return tls13BuildServerAuthFlightEcdsa(
-            certChainDer,
+        certificateVerify = tls13BuildServerCertificateVerifyEcdsa(
             ecdsaKey,
-            transcriptHash,
-            serverHsTrafficSecret
+            certificateVerifyTranscriptHash
         )
-    }
-    if (let Some(rsaKey) <- certificatePrivateKeyRsa) {
-        return tls13BuildServerAuthFlightRsaPss(
-            certChainDer,
+    } else if (let Some(rsaKey) <- certificatePrivateKeyRsa) {
+        certificateVerify = tls13BuildServerCertificateVerifyRsaPss(
             rsaKey,
-            transcriptHash,
-            serverHsTrafficSecret
+            certificateVerifyTranscriptHash
+        )
+    } else {
+        throw CryptoException(
+            InvalidArgument,
+            "TLS1.3 server auth flight signer private key is missing"
         )
     }
-    throw CryptoException(InvalidArgument, "TLS1.3 server auth flight signer private key is missing")
+    let finishedTranscriptHash = tls13HashForCipherSuite(
+        cipherSuite,
+        concat(concat(protectedHandshakePrefix, certificate), certificateVerify)
+    )
+    let finished = tlsEncodeFinishedHandshake(
+        tls13ComputeFinishedVerifyData(serverHsTrafficSecret, finishedTranscriptHash)
+    )
+    Tls13AuthFlight(
+        Tls13AuthFlightRole.SERVER,
+        certificate,
+        certificateVerify,
+        finished
+    )
 }
 
 private func tls13VerifyServerAuthFlightWithOptionalProfile(
     authFlight: Tls13AuthFlight,
     policy: X509VerificationPolicy,
-    transcriptHash: Array<Byte>,
+    protectedHandshakePrefix: Array<Byte>,
+    cipherSuite: Int64,
     serverHsTrafficSecret: Array<Byte>,
     profile: ?FipsProfile
 ): X509VerificationResult {
-    if (let Some(value) <- profile) {
-        return tls13VerifyServerAuthFlightWithProfile(
-            authFlight,
+    if (authFlight.role != Tls13AuthFlightRole.SERVER) {
+        throw CryptoException(InvalidArgument, "TLS1.3 auth flight role mismatch: expected SERVER")
+    }
+    let verification = if (let Some(value) <- profile) {
+        tls13VerifyCertificateChainFromHandshakeWithProfile(
+            authFlight.certificateHandshake,
             policy,
-            transcriptHash,
-            serverHsTrafficSecret,
             value
         )
+    } else {
+        tls13VerifyCertificateChainFromHandshake(authFlight.certificateHandshake, policy)
     }
-    tls13VerifyServerAuthFlight(
-        authFlight,
-        policy,
-        transcriptHash,
-        serverHsTrafficSecret
+    let certificateVerifyTranscriptHash = tls13HashForCipherSuite(
+        cipherSuite,
+        concat(protectedHandshakePrefix, authFlight.certificateHandshake)
     )
+    let certVerifyOk = tls13VerifyServerCertificateVerify(
+        authFlight.certificateVerifyHandshake,
+        verification.chain[0],
+        certificateVerifyTranscriptHash
+    )
+    if (!certVerifyOk) {
+        throw CryptoException(ParseError, "TLS1.3 CertificateVerify validation failed")
+    }
+    let finishedTranscriptHash = tls13HashForCipherSuite(
+        cipherSuite,
+        concat(
+            concat(protectedHandshakePrefix, authFlight.certificateHandshake),
+            authFlight.certificateVerifyHandshake
+        )
+    )
+    let finishedVerifyData = tlsDecodeFinishedHandshake(authFlight.finishedHandshake)
+    let expectedFinished = tls13ComputeFinishedVerifyData(
+        serverHsTrafficSecret,
+        finishedTranscriptHash
+    )
+    if (!constantTimeEquals(finishedVerifyData, expectedFinished)) {
+        throw CryptoException(ParseError, "TLS1.3 Finished verify_data mismatch")
+    }
+    verification
 }
 
 private func tls13BuildSecretsFromStages(
