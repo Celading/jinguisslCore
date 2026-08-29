@@ -271,6 +271,13 @@ def validate_public_delta(root: Path, manifest: dict, base_ref: str) -> list[str
         return [changed_result.stderr.strip() or "unable to read changed files"]
 
     changed = {line for line in changed_result.stdout.splitlines() if line}
+    renamed_from: dict[str, str] = {}
+    rename_result = run_git(root, "diff", "--name-status", "-M", base_ref)
+    if rename_result.returncode == 0:
+        for line in rename_result.stdout.splitlines():
+            fields = line.split("\t")
+            if len(fields) == 3 and fields[0].startswith("R"):
+                renamed_from[fields[2]] = fields[1]
     untracked_result = run_git(root, "ls-files", "--others", "--exclude-standard")
     if untracked_result.returncode != 0:
         return [untracked_result.stderr.strip() or "unable to read untracked files"]
@@ -287,7 +294,8 @@ def validate_public_delta(root: Path, manifest: dict, base_ref: str) -> list[str
         current_text = (
             current_path.read_text(encoding="utf-8") if current_path.is_file() else ""
         )
-        base_result = run_git(root, "show", f"{base_ref}:{path}")
+        base_path = renamed_from.get(path, path)
+        base_result = run_git(root, "show", f"{base_ref}:{base_path}")
         base_text = base_result.stdout if base_result.returncode == 0 else ""
         if public_surface_fingerprint(current_text) == public_surface_fingerprint(base_text):
             continue

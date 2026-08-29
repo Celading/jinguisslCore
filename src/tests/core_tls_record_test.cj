@@ -1,5 +1,7 @@
 package jinguissl_core.tests
 
+import jinguissl_core.crypto.aes.aesGcmEncrypt
+import jinguissl_core.crypto.chacha20.chacha20Poly1305Encrypt
 import jinguissl_core.crypto.compliance.*
 import jinguissl_core.crypto.error.CryptoException
 import jinguissl_core.crypto.tls.*
@@ -63,6 +65,54 @@ public class TlsRecordTestSuite {
         @Assert(opened.fragment, plaintext)
         @Assert(layer.writeSequence, 1)
         @Assert(layer.readSequence, 1)
+    }
+
+    @TestCase
+    public func testTls13AesGcmSealAuthenticatesSerializedCiphertextHeader(): Unit {
+        let key = hexToBytes("000102030405060708090a0b0c0d0e0f")
+        let iv = hexToBytes("101112131415161718191a1b")
+        let plaintext = "tls13-aes-aad".toArray()
+        let innerPlaintext = makeTls13InnerPlaintext(plaintext, UInt8(0x17))
+        let ciphertextLen = innerPlaintext.size + TLS_AEAD_TAG_LEN
+        let aad = makeTls13CiphertextAad(ciphertextLen)
+        let (expectedCiphertext, expectedTag) = aesGcmEncrypt(
+            key,
+            iv,
+            innerPlaintext,
+            aad: aad
+        )
+
+        let layer = TlsAeadRecordLayer(key, iv, version: TLS1_3)
+        let record = tlsDecodeRecord(layer.seal(ApplicationData, plaintext))
+
+        @Assert(record.header.contentType.toString(), "APPLICATION_DATA")
+        @Assert(record.header.version.toString(), "TLS1.2")
+        @Assert(record.header.length, ciphertextLen)
+        @Assert(record.fragment[..expectedCiphertext.size], expectedCiphertext)
+        @Assert(record.fragment[expectedCiphertext.size..], expectedTag)
+    }
+
+    @TestCase
+    public func testTls13MaximumPlaintextFitsCiphertextBound(): Unit {
+        let key = hexToBytes("000102030405060708090a0b0c0d0e0f")
+        let iv = hexToBytes("101112131415161718191a1b")
+        let plaintext = Array<Byte>(TLS_MAX_PLAINTEXT_LEN, repeat: UInt8(0x5a))
+        let layer = TlsAeadRecordLayer(key, iv, version: TLS1_3)
+
+        let record = tlsDecodeRecord(layer.seal(ApplicationData, plaintext))
+
+        @Assert(record.header.length, TLS_MAX_CIPHERTEXT_LEN)
+        @Assert(record.header.length, TLS_MAX_PLAINTEXT_LEN + 1 + TLS_AEAD_TAG_LEN)
+
+        try {
+            _ = layer.seal(
+                ApplicationData,
+                Array<Byte>(TLS_MAX_PLAINTEXT_LEN + 1, repeat: UInt8(0x5a))
+            )
+            @Fail("TLS 1.3 record should reject plaintext above the protocol limit")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "OUT_OF_BOUNDS")
+        }
     }
 
     @TestCase
@@ -141,6 +191,31 @@ public class TlsRecordTestSuite {
         @Assert(opened.fragment, plaintext)
         @Assert(layer.writeSequence, 1)
         @Assert(layer.readSequence, 1)
+    }
+
+    @TestCase
+    public func testTls13ChachaSealAuthenticatesSerializedCiphertextHeader(): Unit {
+        let key = hexToBytes("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+        let iv = hexToBytes("101112131415161718191a1b")
+        let plaintext = "tls13-chacha-aad".toArray()
+        let innerPlaintext = makeTls13InnerPlaintext(plaintext, UInt8(0x17))
+        let ciphertextLen = innerPlaintext.size + TLS_AEAD_TAG_LEN
+        let aad = makeTls13CiphertextAad(ciphertextLen)
+        let (expectedCiphertext, expectedTag) = chacha20Poly1305Encrypt(
+            key,
+            iv,
+            innerPlaintext,
+            aad: aad
+        )
+
+        let layer = TlsChacha20Poly1305RecordLayer(key, iv, version: TLS1_3)
+        let record = tlsDecodeRecord(layer.seal(ApplicationData, plaintext))
+
+        @Assert(record.header.contentType.toString(), "APPLICATION_DATA")
+        @Assert(record.header.version.toString(), "TLS1.2")
+        @Assert(record.header.length, ciphertextLen)
+        @Assert(record.fragment[..expectedCiphertext.size], expectedCiphertext)
+        @Assert(record.fragment[expectedCiphertext.size..], expectedTag)
     }
 
     @TestCase
@@ -261,6 +336,30 @@ private func makePayload(size: Int64): Array<Byte> {
         i += 1
     }
     out
+}
+
+private func makeTls13InnerPlaintext(
+    plaintext: Array<Byte>,
+    contentType: Byte
+): Array<Byte> {
+    let inner = Array<Byte>(plaintext.size + 1, repeat: 0)
+    var i = 0
+    while (i < plaintext.size) {
+        inner[i] = plaintext[i]
+        i += 1
+    }
+    inner[plaintext.size] = contentType
+    inner
+}
+
+private func makeTls13CiphertextAad(ciphertextLen: Int64): Array<Byte> {
+    [
+        UInt8(0x17),
+        UInt8(0x03),
+        UInt8(0x03),
+        UInt8((ciphertextLen >> 8) & 0xff),
+        UInt8(ciphertextLen & 0xff)
+    ]
 }
 
 private func hexToBytes(hex: String): Array<Byte> {

@@ -28,7 +28,7 @@ artifact 是 CI 证据副本，不是第二套结果数据库。公开结论应�
 | 托管依赖图与 lock | `hosted-graph`、`dependency-lock` | Actions step 日志 | 检查公开依赖可复验性；不代表依赖本身已安全审计 |
 | 能力与文档契约 | capability gate 及其回归测试 | Actions step 日志 | 核对 public API、能力矩阵、README/manual 与限制描述 |
 | 构建 | `cjpm build` | job 状态、`build.log` | 证明该 runner 与工具链能构建 |
-| 单元与协议回归 | `cjpm test` | job 状态、`test.log` | 本轮接入前基线为 `477/477`；具体一次运行以对应 commit 日志为准 |
+| 单元与协议回归 | `cjpm test` | job 状态、`test.log` | 本次国密完整面收口本地结果为 `529/529`；公开结论仍以对应 commit 的 CI 日志为准 |
 | known-answer vectors | Cangjie 测试套内 RFC/NIST/协议向量 | 计入测试总数 | 尚未逐向量输出统一 ID 清单 |
 | 负向与 fail-closed | Cangjie 测试套内错误密钥、标签、边界、票据与协议负向 | 计入测试总数 | 证明已写入的拒绝路径，不代表穷尽攻击面 |
 | 外部密码向量库 | 尚未接入标准 lane | 无通过声明 | 尚未接入完整 Wycheproof corpus |
@@ -36,6 +36,25 @@ artifact 是 CI 证据副本，不是第二套结果数据库。公开结论应�
 | fuzz / sanitizer / 故障注入 | 尚未接入标准 lane | 无通过声明 | 普通单元测试不等于模糊测试或内存安全证明 |
 | 恒定时与认证 | 尚未接入标准 lane | 无通过声明 | 不声明 constant-time、FIPS 140、商密或第三方安全认证 |
 | 打包与发布 | 独立 release gate | 不在测试 job 内 | 测试通过不等于 bundle、publish 或注册表消费成功 |
+
+## 国密测试清单
+
+本次国密完整面由现有 `cjpm test` 统一运行，不另设一个容易漂移的 runner。清单按证据面
+映射到以下测试源：
+
+| 证据面 | 测试源 | 主要断言 |
+|:--|:--|:--|
+| SM2/SM3/SM4 | `core_sm2_test.cj`、`core_sm3_test.cj`、`core_sm4_test.cj` | 标准向量、身份绑定、C1C3C2、模式/标签失败关闭 |
+| SM4 扩展与 MAC | `core_sm4_extended_test.cj` | CFB/OFB/XTS/HCTR/CMAC/CBC-MAC 固定向量、partial block 与错误参数 |
+| GM-DRBG | `core_gm_drbg_test.cj` | 确定性状态回放、additional input、reseed、request/reseed limit、uninstantiate |
+| SM9 | `core_sm9_pairing_test.cj`、`core_sm9_schemes_test.cj` | 标准附录 pairing/sign/encrypt/key-exchange、子群/身份/篡改/确认值负向 |
+| RFC 8998 | `core_tls13_sm_test.cj` | curveSM2、SM3 key schedule、SM4-GCM/CCM、CertificateVerify 与失败关闭 |
+| SM2 PKI | `core_x509_sm2_container_test.cj` | 固定 openHiTLS SPKI/SEC1/PKCS#8、CSR、签发、CRL、链/吊销/身份负向 |
+| TLCP | `core_tlcp_test.cj` | 四套 suite、双证书、静态 ECC/ECDHE、key block、双向 CBC/GCM、Finished 与篡改 |
+| DTLCP | `core_dtlcp_test.cj` | epoch/48 位序号、乱序、anti-replay、分片重组、overlap 与 cached-flight backoff |
+
+固定向量可证明已列出的输入输出与边界；它们不替代完整 Wycheproof、fuzz、侧信道评估、
+openHiTLS 在线互操作或第三方认证。
 
 ## 借鉴的大型密码库做法
 

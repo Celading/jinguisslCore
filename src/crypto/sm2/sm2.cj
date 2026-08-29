@@ -225,6 +225,12 @@ public func sm2SharedPoint(privateKey: Sm2PrivateKey, peerPublicKey: Sm2PublicKe
     pointCoordinates(shared)
 }
 
+/** Derive the 32-byte RFC 8998 curveSM2 ECDHE shared secret (the affine x-coordinate). */
+public func sm2EcdhSharedSecret(privateKey: Sm2PrivateKey, peerPublicKey: Sm2PublicKey): Array<Byte> {
+    let sharedPoint = sm2SharedPoint(privateKey, peerPublicKey)
+    sharedPoint[..SM2_FIELD_SIZE]
+}
+
 /** Compare a received SM2 key-exchange confirmation without early byte exit. */
 public func sm2VerifyConfirmation(expected: Array<Byte>, received: Array<Byte>): Bool {
     if (expected.size != 32 || received.size != 32) {
