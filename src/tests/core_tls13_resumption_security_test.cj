@@ -58,7 +58,7 @@ public class Tls13ResumptionSecurityTestSuite {
         @Assert(
             offer.binder,
             resumptionHexToBytes(
-                "af3d62c416566a8d66bec4fde4ecc2dcf741a9b4611ccbf14456757ec1a796df"
+                "f6e75eadb923f67b11ebc1031ebe446c613b88670c32f317fcf6791e473eb30a"
             )
         )
     }

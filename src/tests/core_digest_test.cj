@@ -98,6 +98,26 @@ public class CoreDigestTestSuite {
     }
 
     @TestCase
+    public func testSha256SingleBlockPaddingBoundaryVector(): Unit {
+        // 55 bytes is the last SHA-256 payload length that fits in one block.
+        // This also covers long TLS transcript lengths congruent to 55 mod 64.
+        let data = Array<Byte>(55, repeat: UInt8(0x61))
+        @Assert(
+            bytesToHexLower(sha256(data)),
+            "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"
+        )
+    }
+
+    @TestCase
+    public func testSha256MultiBlockPaddingBoundaryVector(): Unit {
+        let data = Array<Byte>(1591, repeat: UInt8(0x61))
+        @Assert(
+            bytesToHexLower(sha256(data)),
+            "e509a547e2e00a80c4b3deaf4501bd5b33e74b6ee4206b36d54d2f27d22c7e57"
+        )
+    }
+
+    @TestCase
     public func testBytesToHexLowerEdgeCases(): Unit {
         @Assert(bytesToHexLower([]), "")
         @Assert(bytesToHexLower([0x00]), "00")
