@@ -5,12 +5,14 @@ import jinguissl_core.crypto.digest.{sha256, sha384}
 import jinguissl_core.crypto.ecc.{EcPrivateKey, NamedCurve, ecdsaSign, ecdsaVerify}
 import jinguissl_core.crypto.error.{CryptoException, CryptoErrorCode}
 import jinguissl_core.crypto.rsa.{RsaHashAlgorithm, RsaPrivateKey, rsaSignPssWithHash, rsaVerifyPssWithHash}
+import jinguissl_core.crypto.sm2.{Sm2PrivateKey, Sm2PublicKey, sm2Sign, sm2Verify}
 import jinguissl_core.crypto.utils.secureCopyInto
-import jinguissl_core.crypto.x509.{X509Certificate, x509ExtractEcPublicKey, x509ExtractRsaPublicKey}
+import jinguissl_core.crypto.x509.{X509Certificate, x509ExtractEcPublicKey, x509ExtractRsaPublicKey, x509ExtractSm2PublicKey}
 
 private let TLS13_CERT_VERIFY_PREFIX_LEN: Int64 = 64
 private let TLS13_CERT_VERIFY_CONTEXT_SERVER: String = "TLS 1.3, server CertificateVerify"
 private let TLS13_CERT_VERIFY_CONTEXT_CLIENT: String = "TLS 1.3, client CertificateVerify"
+public let TLS13_SM2_SIGNATURE_IDENTITY: String = "TLSv1.3+GM+Cipher+Suite"
 
 public func tls13BuildServerCertificateVerifyEcdsa(
     privateKey: EcPrivateKey,
@@ -38,6 +40,46 @@ public func tls13BuildClientCertificateVerifyRsaPss(
     transcriptHash: Array<Byte>
 ): Array<Byte> {
     tls13BuildCertificateVerifyRsaPss(privateKey, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_CLIENT)
+}
+
+public func tls13BuildServerCertificateVerifySm2(
+    privateKey: Sm2PrivateKey,
+    transcriptHash: Array<Byte>
+): Array<Byte> {
+    tls13BuildCertificateVerifySm2(privateKey, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_SERVER)
+}
+
+public func tls13BuildClientCertificateVerifySm2(
+    privateKey: Sm2PrivateKey,
+    transcriptHash: Array<Byte>
+): Array<Byte> {
+    tls13BuildCertificateVerifySm2(privateKey, transcriptHash, TLS13_CERT_VERIFY_CONTEXT_CLIENT)
+}
+
+public func tls13VerifyServerCertificateVerifySm2(
+    encodedCertificateVerify: Array<Byte>,
+    publicKey: Sm2PublicKey,
+    transcriptHash: Array<Byte>
+): Bool {
+    tls13VerifyCertificateVerifySm2(
+        encodedCertificateVerify,
+        publicKey,
+        transcriptHash,
+        TLS13_CERT_VERIFY_CONTEXT_SERVER
+    )
+}
+
+public func tls13VerifyClientCertificateVerifySm2(
+    encodedCertificateVerify: Array<Byte>,
+    publicKey: Sm2PublicKey,
+    transcriptHash: Array<Byte>
+): Bool {
+    tls13VerifyCertificateVerifySm2(
+        encodedCertificateVerify,
+        publicKey,
+        transcriptHash,
+        TLS13_CERT_VERIFY_CONTEXT_CLIENT
+    )
 }
 
 public func tls13VerifyServerCertificateVerify(
@@ -89,6 +131,45 @@ private func tls13BuildCertificateVerifyRsaPss(
     tlsEncodeCertificateVerifyHandshake(
         TlsCertificateVerifyMessage(TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256, signature)
     )
+}
+
+private func tls13BuildCertificateVerifySm2(
+    privateKey: Sm2PrivateKey,
+    transcriptHash: Array<Byte>,
+    contextLabel: String
+): Array<Byte> {
+    let input = tls13BuildCertificateVerifyInput(contextLabel, transcriptHash, requireSm3: true)
+    let (r, s) = sm2Sign(privateKey, TLS13_SM2_SIGNATURE_IDENTITY.toArray(), input)
+    tlsEncodeCertificateVerifyHandshake(
+        TlsCertificateVerifyMessage(TLS13_SIG_SCHEME_SM2_SM3, tls13EncodeEcdsaSignatureDer(r, s))
+    )
+}
+
+private func tls13VerifyCertificateVerifySm2(
+    encodedCertificateVerify: Array<Byte>,
+    publicKey: Sm2PublicKey,
+    transcriptHash: Array<Byte>,
+    contextLabel: String
+): Bool {
+    let message = try {
+        tlsDecodeCertificateVerifyHandshake(encodedCertificateVerify)
+    } catch (_: CryptoException) {
+        return false
+    }
+    if (message.signatureScheme != TLS13_SIG_SCHEME_SM2_SM3) {
+        return false
+    }
+    let input = try {
+        tls13BuildCertificateVerifyInput(contextLabel, transcriptHash, requireSm3: true)
+    } catch (_: CryptoException) {
+        return false
+    }
+    let (r, s) = try {
+        tls13DecodeEcdsaSignatureDer(message.signature)
+    } catch (_: CryptoException) {
+        return false
+    }
+    sm2Verify(publicKey, TLS13_SM2_SIGNATURE_IDENTITY.toArray(), input, r, s)
 }
 
 private func tls13VerifyCertificateVerify(
@@ -147,6 +228,26 @@ private func tls13VerifyCertificateVerify(
         )
     }
 
+
+    if (message.signatureScheme == TLS13_SIG_SCHEME_SM2_SM3) {
+        let publicKey = try {
+            x509ExtractSm2PublicKey(certificate)
+        } catch (_: CryptoException) {
+            return false
+        }
+        let input = try {
+            tls13BuildCertificateVerifyInput(contextLabel, transcriptHash, requireSm3: true)
+        } catch (_: CryptoException) {
+            return false
+        }
+        let (r, s) = try {
+            tls13DecodeEcdsaSignatureDer(message.signature)
+        } catch (_: CryptoException) {
+            return false
+        }
+        return sm2Verify(publicKey, TLS13_SM2_SIGNATURE_IDENTITY.toArray(), input, r, s)
+    }
+
     false
 }
 
@@ -155,12 +256,7 @@ private func tls13ComputeCertificateVerifyDigestForScheme(
     transcriptHash: Array<Byte>,
     signatureScheme: Int64
 ): Array<Byte> {
-    tls13RequireCertificateVerifyTranscriptHash(transcriptHash)
-    let contextBytes = contextLabel.toArray()
-    let input = Array<Byte>(TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size + 1 + transcriptHash.size, repeat: UInt8(0x20))
-    secureCopyInto(contextBytes, input, dstOffset: TLS13_CERT_VERIFY_PREFIX_LEN)
-    input[TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size] = UInt8(0x00)
-    secureCopyInto(transcriptHash, input, dstOffset: TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size + 1)
+    let input = tls13BuildCertificateVerifyInput(contextLabel, transcriptHash)
     if (signatureScheme == TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256 || signatureScheme == TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256) {
         return sha256(input)
     }
@@ -168,6 +264,26 @@ private func tls13ComputeCertificateVerifyDigestForScheme(
         return sha384(input)
     }
     throw CryptoException(Unsupported, "TLS1.3 CertificateVerify signature scheme is unsupported: ${signatureScheme}")
+}
+
+private func tls13BuildCertificateVerifyInput(
+    contextLabel: String,
+    transcriptHash: Array<Byte>,
+    requireSm3!: Bool = false
+): Array<Byte> {
+    if (requireSm3) {
+        if (transcriptHash.size != TLS13_SHA256_HASH_LEN) {
+            throw CryptoException(InvalidArgument, "RFC8998 CertificateVerify transcript must be an SM3 digest")
+        }
+    } else {
+        tls13RequireCertificateVerifyTranscriptHash(transcriptHash)
+    }
+    let contextBytes = contextLabel.toArray()
+    let input = Array<Byte>(TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size + 1 + transcriptHash.size, repeat: UInt8(0x20))
+    secureCopyInto(contextBytes, input, dstOffset: TLS13_CERT_VERIFY_PREFIX_LEN)
+    input[TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size] = UInt8(0x00)
+    secureCopyInto(transcriptHash, input, dstOffset: TLS13_CERT_VERIFY_PREFIX_LEN + contextBytes.size + 1)
+    input
 }
 
 private func tls13RequireCertificateVerifyTranscriptHash(transcriptHash: Array<Byte>): Unit {

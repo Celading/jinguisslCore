@@ -19,6 +19,10 @@ TLS Layer
 │   ├── Session state
 │   ├── Cipher suite negotiation
 │   └── Key schedule
+├── TLCP / DTLCP (tlcp.cj, tlcp_record.cj, dtlcp.cj)
+│   ├── Dual-certificate ECC / ECDHE handshake
+│   ├── SM3 PRF and SM4-CBC/GCM record
+│   └── Datagram replay, fragmentation and retransmission state
 └── HTTP (http.cj)
     └── Application data encoding
 ```
@@ -32,6 +36,8 @@ TLS Layer
 | TLS_AES_128_GCM_SHA256 | 0x1301 | 已实现 |
 | TLS_AES_256_GCM_SHA384 | 0x1302 | 已实现 |
 | TLS_CHACHA20_POLY1305_SHA256 | 0x1303 | 已实现 |
+| TLS_SM4_GCM_SM3 | 0x00C6 | RFC 8998 本地闭环 |
+| TLS_SM4_CCM_SM3 | 0x00C7 | RFC 8998 本地闭环 |
 
 ### 常量
 
@@ -40,6 +46,9 @@ TLS Layer
 | `TLS13_CIPHER_SUITE_AES_128_GCM_SHA256` | 0x1301 | |
 | `TLS13_CIPHER_SUITE_AES_256_GCM_SHA384` | 0x1302 | |
 | `TLS13_CIPHER_SUITE_CHACHA20_POLY1305_SHA256` | 0x1303 | |
+| `TLS13_CIPHER_SUITE_SM4_GCM_SM3` | 0x00C6 | RFC 8998 |
+| `TLS13_CIPHER_SUITE_SM4_CCM_SM3` | 0x00C7 | RFC 8998 |
+| `TLS13_GROUP_CURVE_SM2` | 41 | curveSM2 |
 | `TLS13_SHA256_HASH_LEN` | 32 | |
 | `TLS13_SHA384_HASH_LEN` | 48 | |
 | `TLS13_DEFAULT_AEAD_KEY_LEN` | 16 | |
@@ -52,6 +61,9 @@ TLS Layer
 | `TLS13_SIG_SCHEME_ECDSA_SECP256R1_SHA256` | 0x0403 |
 | `TLS13_SIG_SCHEME_ECDSA_SECP384R1_SHA384` | 0x0503 |
 | `TLS13_SIG_SCHEME_RSA_PSS_RSAE_SHA256` | 0x0804 |
+| `TLS13_SIG_SCHEME_SM2_SM3` | 0x0708 |
+
+RFC 8998 路径提供 curveSM2 ClientHello/ServerHello、显式 SM3 HKDF 身份、SM4-GCM/CCM record、`TLSv1.3+GM+Cipher+Suite` 身份绑定的 SM2 CertificateVerify，以及 SM2/SM3 X.509 解析、签发与验证。当前证据是本地协议闭环；不声明外部 TLS 实现互操作。
 
 ### 密钥更新
 
@@ -86,6 +98,38 @@ TLS 1.2 Handshake
 └── ChangeCipherSpec → Finished
 ```
 
+## TLCP / DTLCP 1.1
+
+TLCP 使用协议版本 `0x0101`、签名/加密双证书和 SM3 PRF。本仓对齐固定
+openHiTLS 快照中的四套密码组：
+
+| Suite | 值 | 密钥交换 | Record protection |
+|:--|--:|:--|:--|
+| `ECDHE_SM4_CBC_SM3` | 0xE011 | 带静态身份的 SM2 ECDHE | HMAC-SM3 + SM4-CBC |
+| `ECC_SM4_CBC_SM3` | 0xE013 | 加密证书 SM2 静态交换 | HMAC-SM3 + SM4-CBC |
+| `ECDHE_SM4_GCM_SM3` | 0xE051 | 带静态身份的 SM2 ECDHE | SM4-GCM |
+| `ECC_SM4_GCM_SM3` | 0xE053 | 加密证书 SM2 静态交换 | SM4-GCM |
+
+核心 API 按阶段拆分：
+
+- `tlcpEncode/DecodeClientHello`、`tlcpEncode/DecodeServerHello` 与 server preference suite selection；
+- `tlcpBuild/Parse/VerifyDualCertificateHandshake`，分别检查 signing/encryption leaf 的 keyUsage 和链；
+- 静态 ECC 与 ECDHE `ServerKeyExchange` / `ClientKeyExchange`；
+- `tlcpDeriveSecretsFromPreMaster`、SM3 PRF 和 12 字节 Finished；
+- `TlcpRecordLayer` 的方向性 key block、序号、CBC MAC-then-encrypt 与 GCM AEAD。
+
+静态 ECC 的 SM2 密文在 wire 上使用 ASN.1 `SM2Cipher`。私钥解密或 premaster
+版本检查失败会走 48 字节随机 fallback；record 认证失败不会推进读取序号。
+
+DTLCP 使用 13 字节 record header（type、`0x0101`、epoch、48 位 sequence、length）。
+`DtlcpRecordLayer` 支持当前 epoch 内乱序到达和 64 包 anti-replay window；
+`DtlcpHandshakeReassembler` 处理 12 字节握手分片头、乱序片段和一致 overlap；
+`DtlcpFlightRetransmitter` 提供缓存 flight、最大次数和指数退避状态。
+
+这些是库内可组合协议构件，不含 socket client/server、定时器、MTU/拥塞策略，也不声明
+已经通过 openHiTLS 线上互操作或商密认证。更完整的算法与 PKI 边界见
+[国密能力指南](gm-crypto.md)。
+
 ## 记录层
 
 `record.cj` 提供 TLS 记录层的加密和解密。
@@ -95,6 +139,13 @@ TLS 1.2 Handshake
 - 记录序列号管理
 - AEAD 加密与解密
 - 记录分片与重组
+
+TLS 1.3 AES-GCM 与 ChaCha20-Poly1305 路径按 RFC 8446 认证完整的 5 字节
+`TLSCiphertext` header（opaque type、legacy version、密文长度），不会复用
+TLS 1.2 的 13 字节 AAD 缓冲。`TLS_MAX_CIPHERTEXT_LEN` 为最大 16384 字节
+应用明文、一个 `TLSInnerPlaintext` content-type 字节和 16 字节 AEAD tag 的
+总和，即 16401。独立 AEAD 复算测试以序列化 header 构造 AAD，避免库内
+seal/open 同时偏离 wire 语义却仍能自互通。
 
 ## 会话管理
 
