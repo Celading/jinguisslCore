@@ -25,21 +25,33 @@ public class TlsHttpNegotiationPolicy {
     public let requireServerName: Bool
     public let allowedServerNames: Array<String>
     public let alpnPreference: Array<String>
+    public let allowMissingAlpnHttp11Fallback: Bool
 
     public init(
         requireServerName!: Bool = true,
         allowedServerNames!: Array<String> = [],
-        alpnPreference!: Array<String> = []
+        alpnPreference!: Array<String> = [],
+        allowMissingAlpnHttp11Fallback!: Bool = false
     ) {
         let normalizedServerNames = tlsHttpNormalizeServerNames(allowedServerNames)
         var normalizedAlpn = tlsHttpNormalizeAlpn(alpnPreference)
         if (normalizedAlpn.size == 0) {
             normalizedAlpn = tlsHttpDefaultAlpnPreference()
         }
+        if (
+            allowMissingAlpnHttp11Fallback &&
+            !tlsHttpContains(normalizedAlpn, TLS_HTTP_ALPN_HTTP11)
+        ) {
+            throw CryptoException(
+                InvalidArgument,
+                "TLS HTTP missing-ALPN fallback requires http/1.1 in the ALPN preference"
+            )
+        }
 
         this.requireServerName = requireServerName
         this.allowedServerNames = normalizedServerNames
         this.alpnPreference = normalizedAlpn
+        this.allowMissingAlpnHttp11Fallback = allowMissingAlpnHttp11Fallback
     }
 }
 
@@ -458,9 +470,10 @@ private func tls13ValidateHttpNegotiation(
 ): Unit {
     let normalizedAlpn = selectedAlpn.trimAscii().toAsciiLower()
     if (normalizedAlpn.size == 0) {
-        throw CryptoException(ParseError, "TLS HTTP profile requires ALPN negotiation")
-    }
-    if (!tlsHttpContains(policy.alpnPreference, normalizedAlpn)) {
+        if (!policy.allowMissingAlpnHttp11Fallback) {
+            throw CryptoException(ParseError, "TLS HTTP profile requires ALPN negotiation")
+        }
+    } else if (!tlsHttpContains(policy.alpnPreference, normalizedAlpn)) {
         throw CryptoException(ParseError, "TLS HTTP profile ALPN is not accepted: ${normalizedAlpn}")
     }
 
