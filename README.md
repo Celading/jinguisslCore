@@ -48,6 +48,11 @@
 
 当前覆盖 `TLS_AES_128_GCM_SHA256`、`TLS_AES_256_GCM_SHA384`、`TLS_CHACHA20_POLY1305_SHA256`，以及 RFC 8998 的 `TLS_SM4_GCM_SM3` / `TLS_SM4_CCM_SM3`、`curveSM2` 与 `sm2sig_sm3`。HTTP X25519 ClientHello 会优先携带 `TLS_AES_256_GCM_SHA384`。
 
+HTTP 协商策略默认要求 ALPN。仅当调用方显式启用
+`allowMissingAlpnHttp11Fallback` 且策略同时包含 `http/1.1` 时，服务端才接受未携带
+ALPN 的 ClientHello，并以空的协商值交给上层按 HTTP/1.1 处理；未知的非空 ALPN
+仍会失败关闭。该选项不表示通过 TLS 协商出了 `http/1.1`。
+
 当前不声明 `X25519MLKEM768` key share，也不把本地 handshake/record 测试写成浏览器、OpenSSL 或 curl 线上互通成功。
 
 TLS 1.3 AES-GCM 与 ChaCha20-Poly1305 记录层认证线上序列化的 5 字节

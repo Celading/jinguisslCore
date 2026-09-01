@@ -1981,6 +1981,80 @@ public class Tls13HandshakeFlowTestSuite {
     }
 
     @TestCase
+    public func testTls13HttpPolicyAllowsExplicitMissingAlpnHttp11Fallback(): Unit {
+        let leaf = x509ParsePem(readText("testdata/x509/policy_leaf.pem"))
+        let intermediate = x509ParsePem(readText("testdata/x509/policy_intermediate.pem"))
+        let certPrivateKey = x509ParseEcPrivateKeyPkcs8Pem(
+            readText("testdata/x509/policy_leaf_key_pkcs8.pem")
+        )
+        let clientPublic = EcPublicKey(P256, P256_2G_X, P256_2G_Y)
+        let serverPrivate = EcPrivateKey(P256, BigNum.one())
+        let serverPublic = EcPublicKey(P256, P256_GX, P256_GY)
+        let baseHello = tlsDecodeClientHelloHandshake(tls13BuildClientHelloEcdhe(clientPublic))
+        let extensions = ArrayList<TlsExtension>()
+        for (extension in baseHello.extensions) {
+            extensions.add(extension)
+        }
+        extensions.add(tlsBuildServerNameExtension(TEST_HOST_API))
+        let noAlpnHello = tlsEncodeClientHelloHandshake(
+            TlsClientHello(
+                baseHello.random,
+                baseHello.cipherSuites,
+                sessionId: baseHello.sessionId,
+                compressionMethods: baseHello.compressionMethods,
+                extensions: extensions.toArray(),
+                legacyVersion: baseHello.legacyVersion
+            )
+        )
+
+        try {
+            _ = tls13BuildHttpServerHandshakeContextEcdheP256(
+                noAlpnHello,
+                serverPrivate,
+                serverPublic,
+                [leaf.der, intermediate.der],
+                certificatePrivateKeyEcdsa: Some(certPrivateKey),
+                policy: TlsHttpNegotiationPolicy(
+                    requireServerName: true,
+                    allowedServerNames: [TEST_HOST_API],
+                    alpnPreference: ["http/1.1"]
+                )
+            )
+            @Fail("HTTP profile should reject missing ALPN without explicit fallback")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "PARSE_ERROR")
+        }
+
+        let fallbackPolicy = TlsHttpNegotiationPolicy(
+            requireServerName: true,
+            allowedServerNames: [TEST_HOST_API],
+            alpnPreference: ["http/1.1"],
+            allowMissingAlpnHttp11Fallback: true
+        )
+        let context = tls13BuildHttpServerHandshakeContextEcdheP256(
+            noAlpnHello,
+            serverPrivate,
+            serverPublic,
+            [leaf.der, intermediate.der],
+            certificatePrivateKeyEcdsa: Some(certPrivateKey),
+            policy: fallbackPolicy
+        )
+        @Assert(context.flight.selectedAlpn, "")
+        @Assert(context.flight.requestedServerName, TEST_HOST_API)
+        @Assert(context.flight.acknowledgedServerName, true)
+
+        try {
+            _ = TlsHttpNegotiationPolicy(
+                alpnPreference: ["h2"],
+                allowMissingAlpnHttp11Fallback: true
+            )
+            @Fail("missing-ALPN fallback must require http/1.1 policy support")
+        } catch (e: CryptoException) {
+            @Assert(e.code.toString(), "INVALID_ARGUMENT")
+        }
+    }
+
+    @TestCase
     public func testTls13ServerHandshakeContextX25519RsaFlow(): Unit {
         let clientPrivate = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
         let serverPrivate = hexToBytes("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")

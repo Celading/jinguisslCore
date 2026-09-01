@@ -2,6 +2,12 @@
 
 `jinguissl_core.crypto.tls` 提供 TLS 1.2 和 TLS 1.3 的握手、记录层和会话管理。
 
+HTTP helper 的 `TlsHttpNegotiationPolicy` 默认拒绝缺失 ALPN。服务端若需要兼容
+未发送 ALPN 的 HTTP/1.1 客户端，可显式设置
+`allowMissingAlpnHttp11Fallback: true`；该策略必须同时把 `http/1.1` 纳入
+`alpnPreference`。成功时 `selectedAlpn` 保持为空，由上层执行 HTTP/1.1 回落；
+未知的非空 ALPN 不会被该选项放行。
+
 ## 整体架构
 
 ```
