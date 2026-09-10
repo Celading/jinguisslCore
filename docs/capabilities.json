@@ -103,7 +103,7 @@
       "proof": "curve vectors, projective parity and production-consumer tests",
       "limits": "私钥标量路径仍无完整恒定时间证明。",
       "sourceGlobs": ["src/crypto/ecc/*.cj"],
-      "testGlobs": ["src/tests/core_ecc_test.cj", "src/crypto/ecc/ecc_projective_internal_test.cj", "src/tests/core_side_channel_harness_test.cj"],
+      "testGlobs": ["src/tests/core_ecc_test.cj", "src/tests/core_pkix_ec_boundary_test.cj", "src/crypto/ecc/ecc_projective_internal_test.cj", "src/tests/core_side_channel_harness_test.cj"],
       "readmeTokens": ["ECC / ECDSA / ECDH"],
       "manualPages": ["docs/guide/crypto-primitives.md", "docs/api/modules.md"]
     },
@@ -175,7 +175,7 @@
       "proof": "chain, cross-signed issuer, parsing, trust-material and SM2 PKI/container tests",
       "limits": "不声明完整 WebPKI、原生 Keychain/Windows Root Store 或在线 HTTPS 互操作。",
       "sourceGlobs": ["src/crypto/x509/*.cj"],
-      "testGlobs": ["src/tests/core_x509_test.cj", "src/tests/core_x509_sm2_container_test.cj"],
+      "testGlobs": ["src/tests/core_x509_test.cj", "src/tests/core_pkix_ec_boundary_test.cj", "src/tests/core_x509_sm2_container_test.cj"],
       "readmeTokens": ["X.509 / PEM / trust material"],
       "manualPages": ["docs/guide/x509-certificates.md", "docs/api/modules.md"]
     },
