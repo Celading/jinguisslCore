@@ -220,10 +220,10 @@
       "label": "SSH transport helpers",
       "status": "implemented-local-test",
       "summary": "KEX、packet protection、主机密钥、签名与身份验证辅助。",
-      "proof": "SSH coordinator, host verification and protection tests",
+      "proof": "SSH coordinator/host verification tests, independent KDF and OpenSSH 10.0p1 AEAD protected-packet vectors",
       "limits": "无外部 OpenSSH client/server 全流程互操作或产品级会话实现承诺。",
       "sourceGlobs": ["src/crypto/ssh/*.cj"],
-      "testGlobs": ["src/tests/core_ssh_test.cj"],
+      "testGlobs": ["src/tests/core_ssh_test.cj", "src/tests/core_ssh_wire_reference_test.cj"],
       "readmeTokens": ["SSH transport helpers"],
       "manualPages": ["docs/guide/ssh-protocol.md", "docs/api/modules.md"]
     },
