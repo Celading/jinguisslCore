@@ -43,50 +43,6 @@ public enum Tls13HandshakeMode <: Equatable<Tls13HandshakeMode> & ToString {
     }
 }
 
-public class Tls13HandshakeSecrets {
-    public let hashAlgorithm: HashAlgorithm
-    public let earlySecret: Array<Byte>
-    public let handshakeSecret: Array<Byte>
-    public let masterSecret: Array<Byte>
-
-    public let clientHsTrafficSecret: Array<Byte>
-    public let serverHsTrafficSecret: Array<Byte>
-    public let clientAppTrafficSecret: Array<Byte>
-    public let serverAppTrafficSecret: Array<Byte>
-
-    public let clientWriteKey: Array<Byte>
-    public let serverWriteKey: Array<Byte>
-    public let clientWriteIv: Array<Byte>
-    public let serverWriteIv: Array<Byte>
-
-    public init(
-        earlySecret: Array<Byte>,
-        handshakeSecret: Array<Byte>,
-        masterSecret: Array<Byte>,
-        clientHsTrafficSecret: Array<Byte>,
-        serverHsTrafficSecret: Array<Byte>,
-        clientAppTrafficSecret: Array<Byte>,
-        serverAppTrafficSecret: Array<Byte>,
-        clientWriteKey: Array<Byte>,
-        serverWriteKey: Array<Byte>,
-        clientWriteIv: Array<Byte>,
-        serverWriteIv: Array<Byte>,
-        hashAlgorithm!: HashAlgorithm = HashAlgorithm.SHA256
-    ) {
-        this.hashAlgorithm = hashAlgorithm
-        this.earlySecret = earlySecret.clone()
-        this.handshakeSecret = handshakeSecret.clone()
-        this.masterSecret = masterSecret.clone()
-        this.clientHsTrafficSecret = clientHsTrafficSecret.clone()
-        this.serverHsTrafficSecret = serverHsTrafficSecret.clone()
-        this.clientAppTrafficSecret = clientAppTrafficSecret.clone()
-        this.serverAppTrafficSecret = serverAppTrafficSecret.clone()
-        this.clientWriteKey = clientWriteKey.clone()
-        this.serverWriteKey = serverWriteKey.clone()
-        this.clientWriteIv = clientWriteIv.clone()
-        this.serverWriteIv = serverWriteIv.clone()
-    }
-}
 
 public class Tls13EarlyDataSecrets {
     public let clientEarlyTrafficSecret: Array<Byte>
@@ -1936,22 +1892,27 @@ public func tls13ProcessServerHandshakeFlightEcdheP256(
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
-    let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
-        flight.authFlight,
-        policy,
-        protectedHandshakePrefix,
-        selectedCipherSuite,
-        secrets.serverHsTrafficSecret,
-        profile
-    )
-    let (selectedAlpn, acknowledgedServerName) = tls13DecodeEncryptedExtensionsSummary(flight.encryptedExtensions)
-    Tls13ClientHandshakeResult(
-        secrets,
-        verification,
-        selectedAlpn: selectedAlpn,
-        requestedServerName: flight.requestedServerName,
-        acknowledgedServerName: acknowledgedServerName
-    )
+    try {
+        let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
+            flight.authFlight,
+            policy,
+            protectedHandshakePrefix,
+            selectedCipherSuite,
+            secrets.serverHsTrafficSecret,
+            profile
+        )
+        let (selectedAlpn, acknowledgedServerName) = tls13DecodeEncryptedExtensionsSummary(flight.encryptedExtensions)
+        Tls13ClientHandshakeResult(
+            secrets,
+            verification,
+            selectedAlpn: selectedAlpn,
+            requestedServerName: flight.requestedServerName,
+            acknowledgedServerName: acknowledgedServerName
+        )
+    } catch (e: CryptoException) {
+        secrets.destroy()
+        throw e
+    }
 }
 
 /**
@@ -1993,22 +1954,27 @@ public func tls13ProcessServerHandshakeFlightEcdheP384(
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
-    let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
-        flight.authFlight,
-        policy,
-        protectedHandshakePrefix,
-        selectedCipherSuite,
-        secrets.serverHsTrafficSecret,
-        profile
-    )
-    let (selectedAlpn, acknowledgedServerName) = tls13DecodeEncryptedExtensionsSummary(flight.encryptedExtensions)
-    Tls13ClientHandshakeResult(
-        secrets,
-        verification,
-        selectedAlpn: selectedAlpn,
-        requestedServerName: flight.requestedServerName,
-        acknowledgedServerName: acknowledgedServerName
-    )
+    try {
+        let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
+            flight.authFlight,
+            policy,
+            protectedHandshakePrefix,
+            selectedCipherSuite,
+            secrets.serverHsTrafficSecret,
+            profile
+        )
+        let (selectedAlpn, acknowledgedServerName) = tls13DecodeEncryptedExtensionsSummary(flight.encryptedExtensions)
+        Tls13ClientHandshakeResult(
+            secrets,
+            verification,
+            selectedAlpn: selectedAlpn,
+            requestedServerName: flight.requestedServerName,
+            acknowledgedServerName: acknowledgedServerName
+        )
+    } catch (e: CryptoException) {
+        secrets.destroy()
+        throw e
+    }
 }
 
 /**
@@ -2047,22 +2013,27 @@ public func tls13ProcessServerHandshakeFlightX25519(
         selectedCipherSuite,
         appTranscriptHash: fullTranscriptHash
     )
-    let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
-        flight.authFlight,
-        policy,
-        protectedHandshakePrefix,
-        selectedCipherSuite,
-        secrets.serverHsTrafficSecret,
-        profile
-    )
-    let (selectedAlpn, acknowledgedServerName) = tls13DecodeEncryptedExtensionsSummary(flight.encryptedExtensions)
-    Tls13ClientHandshakeResult(
-        secrets,
-        verification,
-        selectedAlpn: selectedAlpn,
-        requestedServerName: flight.requestedServerName,
-        acknowledgedServerName: acknowledgedServerName
-    )
+    try {
+        let verification = tls13VerifyServerAuthFlightWithOptionalProfile(
+            flight.authFlight,
+            policy,
+            protectedHandshakePrefix,
+            selectedCipherSuite,
+            secrets.serverHsTrafficSecret,
+            profile
+        )
+        let (selectedAlpn, acknowledgedServerName) = tls13DecodeEncryptedExtensionsSummary(flight.encryptedExtensions)
+        Tls13ClientHandshakeResult(
+            secrets,
+            verification,
+            selectedAlpn: selectedAlpn,
+            requestedServerName: flight.requestedServerName,
+            acknowledgedServerName: acknowledgedServerName
+        )
+    } catch (e: CryptoException) {
+        secrets.destroy()
+        throw e
+    }
 }
 
 public func tls13BuildServerAuthFlightEcdsa(

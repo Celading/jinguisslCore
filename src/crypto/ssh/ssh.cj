@@ -4,15 +4,16 @@ import std.collection.ArrayList
 import jinguissl_core.crypto.aes.{
     AesGcmContext,
     aesCtrCrypt,
-    aesGcmDecryptIntoWithContext,
-    aesGcmEncryptIntoWithContext
+    aesGcmDecryptWithContext,
+    aesGcmEncryptWithContext
 }
 import jinguissl_core.crypto.bignum.BigNum
 import jinguissl_core.crypto.chacha20.{
     CHACHA20_POLY1305_TAG_LEN,
     Chacha20Poly1305Context,
-    chacha20Poly1305DecryptWithContext,
-    chacha20Poly1305EncryptWithContext,
+    chacha20BlockWithContext,
+    chacha20XorWithContext,
+    poly1305Mac,
     chacha20Poly1305NewContext
 }
 import jinguissl_core.crypto.digest.{hmac, sha1, sha256, sha384, sha512, HashAlgorithm}
@@ -637,9 +638,10 @@ public class SshPacketProtectionLayer {
     private let _writeState: SshPacketCipherState
     private let _readState: SshPacketCipherState
 
-    public init(writeMaterial: SshDirectionKeyMaterial, readMaterial: SshDirectionKeyMaterial) {
-        this._writeState = SshPacketCipherState(writeMaterial)
-        this._readState = SshPacketCipherState(readMaterial)
+    public init(writeMaterial: SshDirectionKeyMaterial, readMaterial: SshDirectionKeyMaterial,
+        initialWriteSequence!: Int64 = 0, initialReadSequence!: Int64 = 0) {
+        this._writeState = SshPacketCipherState(writeMaterial, initialWriteSequence)
+        this._readState = SshPacketCipherState(readMaterial, initialReadSequence)
     }
 
     public prop writeSequence: Int64 {
@@ -917,180 +919,181 @@ public func hostVerification(): SshHostVerificationResult {
     }
 }
 
+// Caller-owned, serial-use directional state. Authentication/framing failure is terminal.
 private class SshPacketCipherState {
-    public let material: SshDirectionKeyMaterial
-    let _blockSize: Int64
-    let _aeadTagLen: Int64
-    let _aesGcmContext: ?AesGcmContext
-    let _chacha20Context: ?Chacha20Poly1305Context
-    var _aeadNonceScratch: Array<Byte> = []
-    var _aeadAadScratch: Array<Byte> = Array<Byte>(4, repeat: 0)
-    var _aeadCipherScratch: Array<Byte> = []
-    var _aeadPlainScratch: Array<Byte> = []
-    var _aeadTagScratch: Array<Byte> = Array<Byte>(CHACHA20_POLY1305_TAG_LEN, repeat: 0)
-    var _sequence: Int64 = 0
-    var _counter: Array<Byte>
+    private let material: SshDirectionKeyMaterial
+    private let _blockSize: Int64
+    private let _aeadTagLen: Int64
+    private let _aesGcmContext: ?AesGcmContext
+    private let _chachaMain: ?Chacha20Poly1305Context
+    private let _chachaHeader: ?Chacha20Poly1305Context
+    private var _sequence: Int64 = 0
+    private var _counter: Array<Byte>
+    private var _failed: Bool = false
+    private var _exhausted: Bool = false
+    private var _used: Bool = false
 
-    public init(material: SshDirectionKeyMaterial) {
-        this.material = material
+    public init(material: SshDirectionKeyMaterial, initialSequence: Int64) {
+        if (initialSequence < 0 || initialSequence > SSH_MAX_SEQUENCE_NUMBER) {
+            throw CryptoException(OutOfBounds, "SSH initial sequence exceeds uint32")
+        }
+        this._sequence = initialSequence
+        // Do not let callers mutate the arrays behind an active packet state.
+        this.material = SshDirectionKeyMaterial(material.cipherName, material.macName,
+            material.iv, material.encryptionKey, material.integrityKey)
         this._blockSize = sshCipherPacketBlockSize(material.cipherName)
         this._aeadTagLen = sshCipherTagLength(material.cipherName)
         this._counter = material.iv.clone()
-        if (material.cipherName == SSH_CIPHER_AES128_GCM_OPENSSH || material.cipherName == SSH_CIPHER_AES256_GCM_OPENSSH) {
+        if (material.cipherName == SSH_CIPHER_AES128_GCM_OPENSSH ||
+            material.cipherName == SSH_CIPHER_AES256_GCM_OPENSSH) {
             this._aesGcmContext = Some(AesGcmContext(material.encryptionKey))
-            this._chacha20Context = None
+            this._chachaMain = None
+            this._chachaHeader = None
         } else if (material.cipherName == SSH_CIPHER_CHACHA20_POLY1305_OPENSSH) {
             this._aesGcmContext = None
-            this._chacha20Context = Some(chacha20Poly1305NewContext(material.encryptionKey))
+            this._chachaMain = Some(chacha20Poly1305NewContext(material.encryptionKey[0..32]))
+            this._chachaHeader = Some(chacha20Poly1305NewContext(material.encryptionKey[32..64]))
         } else {
             this._aesGcmContext = None
-            this._chacha20Context = None
+            this._chachaMain = None
+            this._chachaHeader = None
         }
     }
 
-    public prop sequence: Int64 {
-        get() {
-            _sequence
-        }
-    }
+    public prop sequence: Int64 { get() { _sequence } }
 
     public func reset(): Unit {
-        _sequence = 0
-        _counter = material.iv.clone()
+        if (_used || _failed || _exhausted) {
+            throw CryptoException(InvalidArgument, "SSH used packet state cannot be reset; install fresh keys")
+        }
     }
 
-    /**
- * seal.
- *
- * @throws CryptoException 当操作失败时抛出
- */
-public func seal(payload: Array<Byte>, randomPadding!: Array<Byte> = []): Array<Byte> {
-        let packet = sshEncodeTransportPacket(payload, blockSize: _blockSize, randomPadding: randomPadding)
-        if (_aeadTagLen != 0) {
-            _aeadNonceScratch = sshEnsureScratchSize(_aeadNonceScratch, _counter.size)
-            sshCopyBytesRange(_counter, 0, _aeadNonceScratch, _counter.size)
-            sshWritePacketAeadAad(_aeadAadScratch, _sequence)
-            if (material.cipherName == SSH_CIPHER_AES128_GCM_OPENSSH || material.cipherName == SSH_CIPHER_AES256_GCM_OPENSSH) {
-                let context = match (_aesGcmContext) {
-                    case Some(value) => value
-                    case None =>
-                        throw CryptoException(InternalError, "SSH AES-GCM packet state is not initialized")
-                }
-                _aeadCipherScratch = sshEnsureScratchSize(_aeadCipherScratch, packet.size)
-                aesGcmEncryptIntoWithContext(
-                    context,
-                    _aeadNonceScratch,
-                    packet,
-                    _aeadCipherScratch,
-                    _aeadTagScratch,
-                    aad: _aeadAadScratch,
-                    tagLen: _aeadTagLen
-                )
-                let sealedPacket = sshConcatCipherAndTag(_aeadCipherScratch, _aeadTagScratch, _aeadTagLen)
-                sshAdvanceCounterForPacket(material.cipherName, _counter, packet.size)
-                _sequence = sshNextSequence(_sequence)
-                return sealedPacket
-            }
-            let sealedPacket = sshSealPacketAead(
-                material.cipherName,
-                _aeadNonceScratch,
-                packet,
-                _aeadAadScratch,
-                _aesGcmContext,
-                _chacha20Context
-            )
-            sshAdvanceCounterForPacket(material.cipherName, _counter, packet.size)
-            _sequence = sshNextSequence(_sequence)
-            return sealedPacket
+    private func ensureReady(): Unit {
+        if (_failed || _exhausted) {
+            throw CryptoException(ParseError, "SSH packet state is terminal; install fresh keys")
         }
+    }
 
+    private func advance(packetSize: Int64): Unit {
+        _used = true
+        if (_sequence == SSH_MAX_SEQUENCE_NUMBER) {
+            _exhausted = true
+        } else {
+            _sequence += 1
+        }
+        if (_aesGcmContext.isSome()) {
+            var allOnes = true
+            for (i in 4..12) {
+                if (_counter[i] != 0xff) { allOnes = false }
+            }
+            if (allOnes) { _exhausted = true }
+            else { sshIncrementInvocationCounter96Unchecked(_counter) }
+        } else if (_aeadTagLen == 0) {
+            sshAdvanceCounterForPacket(material.cipherName, _counter, packetSize)
+        }
+    }
+
+    public func seal(payload: Array<Byte>, randomPadding!: Array<Byte> = []): Array<Byte> {
+        ensureReady()
+        try {
+            let packet = sshEncodePacketFraming(payload, _blockSize, randomPadding, _aeadTagLen != 0)
+            let sealed = sealPacket(packet)
+            advance(packet.size)
+            return sealed
+        } catch (e: CryptoException) {
+            _failed = true
+            throw e
+        }
+    }
+
+    private func sealPacket(packet: Array<Byte>): Array<Byte> {
+        match (_aesGcmContext) {
+            case Some(context) =>
+                let (ciphertext, tag) = aesGcmEncryptWithContext(context, _counter,
+                    packet[4..], aad: packet[0..4], tagLen: 16)
+                return concatBytes(packet[0..4], concatBytes(ciphertext, tag))
+            case None => ()
+        }
+        match (_chachaMain) {
+            case Some(bodyContext) =>
+                let header = requireChachaHeader()
+                let nonce = sshChachaPacketNonce(_sequence)
+                let polyKey = chacha20BlockWithContext(bodyContext, 0, nonce)[0..32]
+                let ciphertext = concatBytes(
+                    chacha20XorWithContext(header, nonce, packet[0..4]),
+                    chacha20XorWithContext(bodyContext, nonce, packet[4..], initialCounter: 1))
+                return concatBytes(ciphertext, poly1305Mac(polyKey, ciphertext))
+            case None => ()
+        }
         let mac = sshComputePacketMac(material.macName, material.integrityKey, _sequence, packet)
-        let encryptedPacket = sshCipherPacket(material.cipherName, material.encryptionKey, _counter, packet)
-        sshAdvanceCounterForPacket(material.cipherName, _counter, encryptedPacket.size)
-        _sequence = sshNextSequence(_sequence)
-        concatBytes(encryptedPacket, mac)
+        return concatBytes(sshCipherPacket(material.cipherName, material.encryptionKey, _counter, packet), mac)
     }
 
-    /**
- * open.
- *
- * @throws CryptoException 当操作失败时抛出
- */
-public func open(encodedPacket: Array<Byte>): SshTransportPacket {
-        if (_aeadTagLen != 0) {
-            if (encodedPacket.size < 4 + 1 + SSH_MIN_PACKET_PADDING_LEN + _aeadTagLen) {
-                throw CryptoException(ParseError, "SSH protected packet is too short")
-            }
-            let cipherPacketLen = encodedPacket.size - _aeadTagLen
-            _aeadNonceScratch = sshEnsureScratchSize(_aeadNonceScratch, _counter.size)
-            sshCopyBytesRange(_counter, 0, _aeadNonceScratch, _counter.size)
-            sshWritePacketAeadAad(_aeadAadScratch, _sequence)
-            let packet = if (material.cipherName == SSH_CIPHER_AES128_GCM_OPENSSH || material.cipherName == SSH_CIPHER_AES256_GCM_OPENSSH) {
-                let context = match (_aesGcmContext) {
-                    case Some(value) => value
-                    case None =>
-                        throw CryptoException(InternalError, "SSH AES-GCM packet state is not initialized")
-                }
-                _aeadCipherScratch = sshEnsureScratchSize(_aeadCipherScratch, cipherPacketLen)
-                _aeadPlainScratch = sshEnsureScratchSize(_aeadPlainScratch, cipherPacketLen)
-                sshCopyBytesRange(encodedPacket, 0, _aeadCipherScratch, cipherPacketLen)
-                sshCopyBytesRange(encodedPacket, cipherPacketLen, _aeadTagScratch, _aeadTagLen)
-                try {
-                    aesGcmDecryptIntoWithContext(
-                        context,
-                        _aeadNonceScratch,
-                        _aeadCipherScratch,
-                        _aeadTagScratch,
-                        _aeadPlainScratch,
-                        aad: _aeadAadScratch
-                    )
-                    _aeadPlainScratch
-                } catch (_: CryptoException) {
-                    throw CryptoException(ParseError, "SSH packet AEAD verification failed")
-                }
-            } else {
-                _aeadCipherScratch = sshEnsureScratchSize(_aeadCipherScratch, cipherPacketLen)
-                sshCopyBytesRange(encodedPacket, 0, _aeadCipherScratch, cipherPacketLen)
-                sshCopyBytesRange(encodedPacket, cipherPacketLen, _aeadTagScratch, _aeadTagLen)
-                sshOpenPacketAead(
-                    material.cipherName,
-                    _aeadNonceScratch,
-                    _aeadCipherScratch,
-                    _aeadTagScratch,
-                    _aeadAadScratch,
-                    _aesGcmContext,
-                    _chacha20Context
-                )
-            }
-            let decoded = sshDecodeTransportPacket(packet, blockSize: _blockSize)
-            sshAdvanceCounterForPacket(material.cipherName, _counter, packet.size)
-            _sequence = sshNextSequence(_sequence)
+    public func open(encodedPacket: Array<Byte>): SshTransportPacket {
+        ensureReady()
+        try {
+            let packet = openPacket(encodedPacket)
+            let decoded = sshDecodePacketFraming(packet, _blockSize, _aeadTagLen != 0)
+            advance(packet.size)
             return decoded
+        } catch (e: CryptoException) {
+            _failed = true
+            throw CryptoException(ParseError, "SSH packet authentication or framing failed")
         }
+    }
 
-        let macLen = sshMacDigestLength(material.macName)
-        if (encodedPacket.size < 4 + 1 + SSH_MIN_PACKET_PADDING_LEN + macLen) {
+    private func openPacket(encodedPacket: Array<Byte>): Array<Byte> {
+        let tagLen = if (_aeadTagLen != 0) { _aeadTagLen } else { sshMacDigestLength(material.macName) }
+        if (encodedPacket.size < 4 + 1 + SSH_MIN_PACKET_PADDING_LEN + tagLen) {
             throw CryptoException(ParseError, "SSH protected packet is too short")
         }
-        let cipherPacketLen = encodedPacket.size - macLen
-        let encryptedPacket = encodedPacket[0..cipherPacketLen]
-        let receivedMac = if (macLen == 0) {
-            Array<Byte>(0, repeat: 0)
-        } else {
-            encodedPacket[cipherPacketLen..]
+        let bodyEnd = encodedPacket.size - tagLen
+        let tag = encodedPacket[bodyEnd..]
+        match (_aesGcmContext) {
+            case Some(context) =>
+                let length = encodedPacket[0..4]
+                let plaintext = aesGcmDecryptWithContext(context, _counter,
+                    encodedPacket[4..bodyEnd], tag, aad: length)
+                return concatBytes(length, plaintext)
+            case None => ()
         }
-
-        let packet = sshCipherPacket(material.cipherName, material.encryptionKey, _counter, encryptedPacket)
-        let expectedMac = sshComputePacketMac(material.macName, material.integrityKey, _sequence, packet)
-        if (!constantTimeEquals(receivedMac, expectedMac)) {
-            throw CryptoException(ParseError, "SSH packet MAC verification failed")
+        match (_chachaMain) {
+            case Some(bodyContext) =>
+                let nonce = sshChachaPacketNonce(_sequence)
+                let polyKey = chacha20BlockWithContext(bodyContext, 0, nonce)[0..32]
+                let ciphertext = encodedPacket[0..bodyEnd]
+                if (!constantTimeEquals(tag, poly1305Mac(polyKey, ciphertext))) {
+                    throw CryptoException(ParseError, "SSH packet authentication failed")
+                }
+                return concatBytes(
+                    chacha20XorWithContext(requireChachaHeader(), nonce, ciphertext[0..4]),
+                    chacha20XorWithContext(bodyContext, nonce, ciphertext[4..], initialCounter: 1))
+            case None => ()
         }
-
-        let decoded = sshDecodeTransportPacket(packet, blockSize: _blockSize)
-        sshAdvanceCounterForPacket(material.cipherName, _counter, encryptedPacket.size)
-        _sequence = sshNextSequence(_sequence)
-        decoded
+        let packet = sshCipherPacket(material.cipherName, material.encryptionKey, _counter, encodedPacket[0..bodyEnd])
+        if (!constantTimeEquals(tag, sshComputePacketMac(material.macName, material.integrityKey, _sequence, packet))) {
+            throw CryptoException(ParseError, "SSH packet authentication failed")
+        }
+        return packet
     }
+
+    private func requireChachaHeader(): Chacha20Poly1305Context {
+        match (_chachaHeader) {
+            case Some(value) => value
+            case None => throw CryptoException(InternalError, "SSH header cipher is not initialized")
+        }
+    }
+}
+
+// Original ChaCha uses a 64-bit block counter followed by a 64-bit BE SSH
+// sequence nonce. SSH packet sizes keep the counter below 2^32, so the IETF
+// primitive with nonce = zero32 || sequence64BE has the identical state words.
+// This is NOT the IETF AEAD construction: Poly1305 authenticates ciphertext
+// length || ciphertext body directly, without AEAD padding/length trailers.
+private func sshChachaPacketNonce(sequence: Int64): Array<Byte> {
+    let nonce = Array<Byte>(12, repeat: 0)
+    encodeUInt32(nonce, 8, sequence)
+    nonce
 }
 
 public func sshBuildVersionBanner(softwareVersion: String, comments!: String = ""): SshVersionBanner {
@@ -1196,7 +1199,7 @@ public func sshBuildDefaultKexInit(cookie!: Array<Byte> = []): SshKexInitMessage
     }
     SshKexInitMessage(
         effectiveCookie,
-        ["curve25519-sha256", "ecdh-sha2-nistp256", "diffie-hellman-group14-sha256"],
+        ["curve25519-sha256"],
         [
             "ssh-ed25519",
             "rsa-sha2-512",
@@ -1220,8 +1223,8 @@ public func sshBuildDefaultKexInit(cookie!: Array<Byte> = []): SshKexInitMessage
         ],
         ["hmac-sha2-256", "hmac-sha2-512"],
         ["hmac-sha2-256", "hmac-sha2-512"],
-        ["none", SSH_COMPRESSION_ZLIB_OPENSSH],
-        ["none", SSH_COMPRESSION_ZLIB_OPENSSH],
+        ["none"],
+        ["none"],
         languagesClientToServer: [],
         languagesServerToClient: [],
         firstKexPacketFollows: false,
@@ -1359,6 +1362,7 @@ public func sshDeriveSessionKeysSha256(
     sessionId: Array<Byte>,
     negotiated: SshNegotiatedAlgorithms
 ): SshDerivedSessionKeys {
+    sshRequireExecutableAlgorithms(negotiated)
     if (sharedSecret.size != X25519_SHARED_SECRET_LEN) {
         throw CryptoException(InvalidArgument, "SSH KDF shared secret length is invalid")
     }
@@ -2105,7 +2109,7 @@ public func sshComputeExchangeHashSha256(
     appendString(payload, serverHostKey)
     appendString(payload, clientEphemeralPublicKey)
     appendString(payload, serverEphemeralPublicKey)
-    appendString(payload, sharedSecret)
+    sshAppendPositiveMpint(payload, sharedSecret)
     sha256(payload.toArray())
 }
 
@@ -2196,43 +2200,45 @@ public func sshDecodeKexInit(encoded: Array<Byte>): SshKexInitMessage {
 }
 
 public func sshNegotiateKexInit(client: SshKexInitMessage, server: SshKexInitMessage): SshNegotiatedAlgorithms {
-    let kexAlgorithm = selectAlgorithm(server.kexAlgorithms, client.kexAlgorithms, "kex")
+    let kexAlgorithm = selectAlgorithm(client.kexAlgorithms, server.kexAlgorithms, "kex")
     let hostKeyAlgorithm = selectAlgorithm(
-        server.serverHostKeyAlgorithms,
         client.serverHostKeyAlgorithms,
+        server.serverHostKeyAlgorithms,
         "host key"
     )
     let encC2s = selectAlgorithm(
-        server.encryptionAlgorithmsClientToServer,
         client.encryptionAlgorithmsClientToServer,
+        server.encryptionAlgorithmsClientToServer,
         "client_to_server cipher"
     )
     let encS2c = selectAlgorithm(
-        server.encryptionAlgorithmsServerToClient,
         client.encryptionAlgorithmsServerToClient,
+        server.encryptionAlgorithmsServerToClient,
         "server_to_client cipher"
     )
     let macC2s = selectAlgorithm(
-        server.macAlgorithmsClientToServer,
         client.macAlgorithmsClientToServer,
+        server.macAlgorithmsClientToServer,
         "client_to_server MAC"
     )
     let macS2c = selectAlgorithm(
-        server.macAlgorithmsServerToClient,
         client.macAlgorithmsServerToClient,
+        server.macAlgorithmsServerToClient,
         "server_to_client MAC"
     )
     let compC2s = selectAlgorithm(
-        server.compressionAlgorithmsClientToServer,
         client.compressionAlgorithmsClientToServer,
+        server.compressionAlgorithmsClientToServer,
         "client_to_server compression"
     )
     let compS2c = selectAlgorithm(
-        server.compressionAlgorithmsServerToClient,
         client.compressionAlgorithmsServerToClient,
+        server.compressionAlgorithmsServerToClient,
         "server_to_client compression"
     )
-    SshNegotiatedAlgorithms(kexAlgorithm, hostKeyAlgorithm, encC2s, encS2c, macC2s, macS2c, compC2s, compS2c)
+    let result = SshNegotiatedAlgorithms(kexAlgorithm, hostKeyAlgorithm, encC2s, encS2c, macC2s, macS2c, compC2s, compS2c)
+    sshRequireExecutableAlgorithms(result)
+    result
 }
 
 /**
@@ -2245,13 +2251,19 @@ public func sshEncodeTransportPacket(
     blockSize!: Int64 = SSH_DEFAULT_PACKET_BLOCK_SIZE,
     randomPadding!: Array<Byte> = []
 ): Array<Byte> {
+    sshEncodePacketFraming(payload, blockSize, randomPadding, false)
+}
+
+private func sshEncodePacketFraming(payload: Array<Byte>, blockSize: Int64,
+    randomPadding: Array<Byte>, separateLength: Bool): Array<Byte> {
     validatePacketBlockSize(blockSize)
     if (payload.size > 0xffff_ffff - 256) {
         throw CryptoException(OutOfBounds, "SSH payload is too large")
     }
 
     var paddingLen = SSH_MIN_PACKET_PADDING_LEN
-    while (((payload.size + 1 + paddingLen) % blockSize) != 0) {
+    let lengthBytes = if (separateLength) { 0 } else { 4 }
+    while (((lengthBytes + payload.size + 1 + paddingLen) % blockSize) != 0) {
         paddingLen += 1
     }
     if (paddingLen > 255) {
@@ -2289,6 +2301,11 @@ public func sshDecodeTransportPacket(
     encoded: Array<Byte>,
     blockSize!: Int64 = SSH_DEFAULT_PACKET_BLOCK_SIZE
 ): SshTransportPacket {
+    sshDecodePacketFraming(encoded, blockSize, false)
+}
+
+private func sshDecodePacketFraming(encoded: Array<Byte>, blockSize: Int64,
+    separateLength: Bool): SshTransportPacket {
     validatePacketBlockSize(blockSize)
     if (encoded.size < 5) {
         throw CryptoException(ParseError, "SSH packet is too short")
@@ -2300,7 +2317,7 @@ public func sshDecodeTransportPacket(
     if (encoded.size != 4 + packetLength) {
         throw CryptoException(ParseError, "SSH packet_length does not match encoded size")
     }
-    if ((packetLength % blockSize) != 0) {
+    if (((packetLength + if (separateLength) { 0 } else { 4 }) % blockSize) != 0) {
         throw CryptoException(ParseError, "SSH packet_length is not block aligned")
     }
 
@@ -2435,20 +2452,20 @@ private func sshDeriveKeyMaterialSha256(
     }
 
     let seed = ArrayList<Byte>()
-    appendString(seed, sharedSecret)
-    appendString(seed, exchangeHash)
+    sshAppendPositiveMpint(seed, sharedSecret)
+    appendBytes(seed, exchangeHash)
     seed.add(letter)
-    appendString(seed, sessionId)
+    appendBytes(seed, sessionId)
 
     var material = sha256(seed.toArray())
     let prefix = ArrayList<Byte>()
-    appendString(prefix, sharedSecret)
-    appendString(prefix, exchangeHash)
+    sshAppendPositiveMpint(prefix, sharedSecret)
+    appendBytes(prefix, exchangeHash)
 
     while (material.size < length) {
         let nextInput = ArrayList<Byte>()
         appendBytes(nextInput, prefix.toArray())
-        appendString(nextInput, material)
+        appendBytes(nextInput, material)
         material = concatBytes(material, sha256(nextInput.toArray()))
     }
     material[0..length]
@@ -2462,7 +2479,7 @@ private func sshCipherMaterialLengths(cipherName: String): (Int64, Int64) {
         return (16, 32)
     }
     if (cipherName == SSH_CIPHER_CHACHA20_POLY1305_OPENSSH) {
-        return (12, 32)
+        return (0, 64)
     }
     if (cipherName == SSH_CIPHER_AES128_GCM_OPENSSH) {
         return (12, 16)
@@ -2487,7 +2504,8 @@ private func sshMacKeyLength(macName: String): Int64 {
 }
 
 private func sshCipherPacketBlockSize(cipherName: String): Int64 {
-    if (cipherName == "aes128-ctr" || cipherName == "aes256-ctr") {
+    if (cipherName == "aes128-ctr" || cipherName == "aes256-ctr" ||
+        cipherName == SSH_CIPHER_AES128_GCM_OPENSSH || cipherName == SSH_CIPHER_AES256_GCM_OPENSSH) {
         return SSH_AES_BLOCK_SIZE
     }
     if (
@@ -2509,101 +2527,6 @@ private func sshCipherTagLength(cipherName: String): Int64 {
         return 16
     }
     0
-}
-
-private func sshEnsureScratchSize(buffer: Array<Byte>, size: Int64): Array<Byte> {
-    if (size < 0) {
-        throw CryptoException(InvalidArgument, "SSH scratch buffer size must be non-negative")
-    }
-    if (buffer.size == size) {
-        return buffer
-    }
-    Array<Byte>(size, repeat: 0)
-}
-
-private func sshCopyBytesRange(src: Array<Byte>, srcOffset: Int64, dst: Array<Byte>, count: Int64): Unit {
-    if (srcOffset < 0 || count < 0) {
-        throw CryptoException(OutOfBounds, "SSH byte-range copy offsets must be non-negative")
-    }
-    if ((srcOffset + count) > src.size || count > dst.size) {
-        throw CryptoException(OutOfBounds, "SSH byte-range copy is out of bounds")
-    }
-    var i = 0
-    while (i < count) {
-        dst[i] = src[srcOffset + i]
-        i += 1
-    }
-}
-
-private func sshConcatCipherAndTag(ciphertext: Array<Byte>, tag: Array<Byte>, tagLen: Int64): Array<Byte> {
-    if (tagLen <= 0 || tagLen > tag.size) {
-        throw CryptoException(InvalidArgument, "SSH AEAD tag length is invalid")
-    }
-    let out = Array<Byte>(ciphertext.size + tagLen, repeat: 0)
-    var i = 0
-    while (i < ciphertext.size) {
-        out[i] = ciphertext[i]
-        i += 1
-    }
-    var j = 0
-    while (j < tagLen) {
-        out[ciphertext.size + j] = tag[j]
-        j += 1
-    }
-    out
-}
-
-private func sshWritePacketAeadAad(aad: Array<Byte>, sequenceNumber: Int64): Unit {
-    if (aad.size != 4) {
-        throw CryptoException(InvalidArgument, "SSH packet AEAD additional data must be 4 bytes")
-    }
-    encodeUInt32(aad, 0, sequenceNumber)
-}
-
-private func sshSealPacketAead(
-    cipherName: String,
-    nonce: Array<Byte>,
-    packet: Array<Byte>,
-    aad: Array<Byte>,
-    aesGcmContext: ?AesGcmContext,
-    chacha20Context: ?Chacha20Poly1305Context
-): Array<Byte> {
-    let _ = aesGcmContext
-    if (cipherName == SSH_CIPHER_CHACHA20_POLY1305_OPENSSH) {
-        let context = match (chacha20Context) {
-            case Some(value) => value
-            case None =>
-                throw CryptoException(InternalError, "SSH ChaCha20-Poly1305 packet state is not initialized")
-        }
-        let (ciphertext, tag) = chacha20Poly1305EncryptWithContext(context, nonce, packet, aad: aad)
-        return concatBytes(ciphertext, tag)
-    }
-    throw CryptoException(Unsupported, "SSH AEAD packet cipher is unsupported: ${cipherName}")
-}
-
-private func sshOpenPacketAead(
-    cipherName: String,
-    nonce: Array<Byte>,
-    ciphertext: Array<Byte>,
-    tag: Array<Byte>,
-    aad: Array<Byte>,
-    aesGcmContext: ?AesGcmContext,
-    chacha20Context: ?Chacha20Poly1305Context
-): Array<Byte> {
-    let _ = aesGcmContext
-    if (cipherName == SSH_CIPHER_CHACHA20_POLY1305_OPENSSH) {
-        let context = match (chacha20Context) {
-            case Some(value) => value
-            case None =>
-                throw CryptoException(InternalError, "SSH ChaCha20-Poly1305 packet state is not initialized")
-        }
-        try {
-            return chacha20Poly1305DecryptWithContext(context, nonce, ciphertext, tag, aad: aad)
-        } catch (_: CryptoException) {
-            throw CryptoException(ParseError, "SSH packet AEAD verification failed")
-        }
-    }
-    throw CryptoException(Unsupported, "SSH AEAD packet cipher is unsupported: ${cipherName}")
 }
 
 private func sshMacDigestLength(macName: String): Int64 {
@@ -2802,4 +2725,34 @@ private func validatePacketBlockSize(blockSize: Int64): Unit {
     if (blockSize < SSH_DEFAULT_PACKET_BLOCK_SIZE || blockSize > 255) {
         throw CryptoException(InvalidArgument, "SSH packet block size must be in [8, 255]")
     }
+}
+
+private func sshRequireExecutableAlgorithms(negotiated: SshNegotiatedAlgorithms): Unit {
+    if (negotiated.kexAlgorithm != "curve25519-sha256") {
+        throw CryptoException(Unsupported, "SSH executable KEX requires curve25519-sha256")
+    }
+    for (cipher in [negotiated.encryptionAlgorithmClientToServer, negotiated.encryptionAlgorithmServerToClient]) {
+        if (!sshIsCipherSupported(cipher)) { throw CryptoException(Unsupported, "SSH cipher is not executable") }
+    }
+    for (mac in [negotiated.macAlgorithmClientToServer, negotiated.macAlgorithmServerToClient]) {
+        if (!sshIsMacSupported(mac)) { throw CryptoException(Unsupported, "SSH MAC is not executable") }
+    }
+    if (negotiated.compressionAlgorithmClientToServer != "none" ||
+        negotiated.compressionAlgorithmServerToClient != "none") {
+        throw CryptoException(Unsupported, "SSH compression is not implemented")
+    }
+}
+
+private func sshAppendPositiveMpint(out: ArrayList<Byte>, bytes: Array<Byte>): Unit {
+    var start = 0
+    while (start < bytes.size && bytes[start] == 0) { start += 1 }
+    if (start == bytes.size) {
+        throw CryptoException(InvalidArgument, "SSH shared secret must not be zero")
+    }
+    let positive = bytes[start..]
+    if ((UInt8(positive[0]) & UInt8(0x80)) != 0) {
+        appendUInt32(out, positive.size + 1)
+        out.add(0)
+        appendBytes(out, positive)
+    } else { appendString(out, positive) }
 }

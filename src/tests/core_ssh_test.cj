@@ -80,9 +80,9 @@ public class SshTestSuite {
         )
 
         let negotiated = sshNegotiateKexInit(client, server)
-        @Assert(negotiated.kexAlgorithm, "ecdh-sha2-nistp256")
-        @Assert(negotiated.serverHostKeyAlgorithm, "rsa-sha2-256")
-        @Assert(negotiated.encryptionAlgorithmClientToServer, "aes128-ctr")
+        @Assert(negotiated.kexAlgorithm, "curve25519-sha256")
+        @Assert(negotiated.serverHostKeyAlgorithm, "ssh-ed25519")
+        @Assert(negotiated.encryptionAlgorithmClientToServer, SSH_CIPHER_AES128_GCM_OPENSSH)
         @Assert(negotiated.macAlgorithmClientToServer, "hmac-sha2-256")
         @Assert(negotiated.compressionAlgorithmServerToClient, "none")
 
@@ -117,7 +117,7 @@ public class SshTestSuite {
         let decoded = sshDecodeTransportPacket(encoded, blockSize: 16)
 
         @Assert(decoded.payload, payload)
-        @Assert((decoded.packetLength % 16), 0)
+        @Assert(((decoded.packetLength + 4) % 16), 0)
         @Assert(decoded.padding.size >= SSH_MIN_PACKET_PADDING_LEN, true)
 
         let malformedLength = encoded.clone()
@@ -459,11 +459,11 @@ public class SshTestSuite {
             "none"
         )
         let chachaDerived = sshDeriveSessionKeysSha256(sharedSecret, exchangeHash, sessionId, chachaNegotiated)
-        @Assert(chachaDerived.clientToServer.iv.size, 12)
-        @Assert(chachaDerived.clientToServer.encryptionKey.size, 32)
+        @Assert(chachaDerived.clientToServer.iv.size, 0)
+        @Assert(chachaDerived.clientToServer.encryptionKey.size, 64)
         @Assert(chachaDerived.clientToServer.integrityKey.size, 0)
-        @Assert(chachaDerived.serverToClient.iv.size, 12)
-        @Assert(chachaDerived.serverToClient.encryptionKey.size, 32)
+        @Assert(chachaDerived.serverToClient.iv.size, 0)
+        @Assert(chachaDerived.serverToClient.encryptionKey.size, 64)
         @Assert(chachaDerived.serverToClient.integrityKey.size, 0)
     }
 
@@ -2444,15 +2444,15 @@ private func buildChacha20Poly1305DerivedSessionKeys(): SshDerivedSessionKeys {
     let clientToServer = SshDirectionKeyMaterial(
         SSH_CIPHER_CHACHA20_POLY1305_OPENSSH,
         "none",
-        incrementalBytes(12, start: 19),
-        incrementalBytes(32, start: 51),
+        [],
+        incrementalBytes(64, start: 51),
         []
     )
     let serverToClient = SshDirectionKeyMaterial(
         SSH_CIPHER_CHACHA20_POLY1305_OPENSSH,
         "none",
-        incrementalBytes(12, start: 83),
-        incrementalBytes(32, start: 115),
+        [],
+        incrementalBytes(64, start: 115),
         []
     )
     SshDerivedSessionKeys(incrementalBytes(32, start: 147), clientToServer, serverToClient)
