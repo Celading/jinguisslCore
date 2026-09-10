@@ -1456,6 +1456,11 @@ public func x509VerifyCertificateChain(leaf: X509Certificate, policy: X509Verifi
         throw CryptoException(ParseError, "X509 chain does not terminate at a trusted anchor")
     }
 
+    // A critical extension is supported only when this policy processes its
+    // complete semantics. Apply this conservative rule to anchors as well.
+    for (index in 0..chain.size) {
+        x509RequireProcessedExtensions(chain[index], index == 0, policy)
+    }
     x509RequireLeafUsageConstraints(chain[0], policy)
 
     let now = policy.validationTime
@@ -1829,6 +1834,11 @@ private func parseExtensions(explicitValue: Array<Byte>): Array<X509Extension> {
 
         let oidElem = extReader.readElement("X509 extension OID", expectedTag: DER_TAG_OID)
         let oid = decodeOid(oidElem.value, "X509 extension OID")
+        for (existing in extensions) {
+            if (existing.oid == oid) {
+                throw CryptoException(ParseError, "duplicate X509 extension OID: ${oid}")
+            }
+        }
 
         var critical = false
         if (extReader.hasRemaining()) {
@@ -1846,6 +1856,55 @@ private func parseExtensions(explicitValue: Array<Byte>): Array<X509Extension> {
         extensions.add(X509Extension(oid, critical, valueElem.value))
     }
     extensions.toArray()
+}
+
+private func x509RequireProcessedExtensions(
+    cert: X509Certificate, isLeaf: Bool, policy: X509VerificationPolicy
+): Unit {
+    let seen = ArrayList<String>()
+    for (ext in cert.extensions) {
+        if (arrayContainsString(seen.toArray(), ext.oid)) {
+            throw CryptoException(ParseError, "duplicate X509 extension OID: ${ext.oid}")
+        }
+        seen.add(ext.oid)
+        if (ext.oid == X509_OID_BASIC_CONSTRAINTS) {
+            let constraints = x509DecodeBasicConstraintsFromExtension(ext)
+            if (let Some(_) <- constraints.pathLenConstraint) {
+                if (!constraints.ca) {
+                    throw CryptoException(ParseError, "non-CA basicConstraints cannot contain pathLenConstraint")
+                }
+            }
+            continue
+        }
+        if (ext.oid == X509_OID_KEY_USAGE) {
+            _ = x509DecodeKeyUsageFromExtension(ext)
+            continue
+        }
+        if (!ext.critical) { continue }
+        if (ext.oid == X509_OID_EXTENDED_KEY_USAGE && isLeaf &&
+            policy.requiredLeafExtendedKeyUsages.size > 0) {
+            _ = x509DecodeExtendedKeyUsageFromExtension(ext)
+            continue
+        }
+        if (ext.oid == X509_OID_SUBJECT_ALT_NAME && isLeaf &&
+            policy.requiredLeafDnsName.size > 0) {
+            // The active verifier implements DNS names only. Do not silently
+            // ignore a different GeneralName in a critical SAN.
+            let elem = derReadSingleElement(ext.value, "critical subjectAltName")
+            if (elem.tag != DER_TAG_SEQUENCE || elem.value.size == 0) {
+                throw CryptoException(ParseError, "critical subjectAltName must be a nonempty sequence")
+            }
+            let names = DerReader(elem.value)
+            while (names.hasRemaining()) {
+                let name = names.readElement("critical DNS subjectAltName", expectedTag: 0x82)
+                if (name.value.size == 0) {
+                    throw CryptoException(ParseError, "critical DNS subjectAltName must not be empty")
+                }
+            }
+            continue
+        }
+        throw CryptoException(ParseError, "X509 critical extension is not fully processed: ${ext.oid}")
+    }
 }
 
 private func parseRevokedCertificates(encoded: Array<Byte>): Array<String> {
