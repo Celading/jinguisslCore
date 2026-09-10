@@ -2,6 +2,12 @@
 
 `jinguissl_core.crypto.tls` 提供 TLS 1.2 和 TLS 1.3 的握手、记录层和会话管理。
 
+HTTP helper 的 `TlsHttpNegotiationPolicy` 默认拒绝缺失 ALPN。服务端若需要兼容
+未发送 ALPN 的 HTTP/1.1 客户端，可显式设置
+`allowMissingAlpnHttp11Fallback: true`；该策略必须同时把 `http/1.1` 纳入
+`alpnPreference`。成功时 `selectedAlpn` 保持为空，由上层执行 HTTP/1.1 回落；
+未知的非空 ALPN 不会被该选项放行。
+
 ## 整体架构
 
 ```
@@ -176,3 +182,13 @@ PSK 与上下文，后续仍必须完成 PSK+DHE key schedule、ServerHello 与�
 恢复 PSK 派生由 RFC 8448 官方向量回归；票据 age/lifetime/binder/binding/single-use/
 rotation 与 0-RTT 拒绝由本地安全测试覆盖。required mTLS 另有缺失客户端 flight、
 不受信链、CertificateVerify 篡改、transcript 不匹配与 Finished 篡改的负向回归。
+## TLS 1.3 握手秘密的生命周期
+
+`Tls13HandshakeSecrets` 的密钥/secret 属性保留原名，但每次访问返回独立副本；
+修改副本不再修改内部状态。对象提供显式、幂等 `destroy()` 与 `isDestroyed`，
+销毁后 secret/key/IV 属性访问失败。由调用方串行持有，在替换、失败和会话结束
+时销毁；已经导出的副本及由其构造的 record 上下文另有独立所有权。
+
+清理是自有缓冲区的尽力确定性覆盖，不依赖析构器，不声称清除了 GC 迁移副本、
+原语内部临时分配、调用方副本或物理内存。该生命周期不等于全部 TLS/SSH/AES
+对象都已具备自动清理。

@@ -267,3 +267,12 @@ class X509NameAttribute {
     // OID、值
 }
 ```
+# 验证边界补充
+
+链验证拒绝重复扩展 OID，以及当前策略无法完整处理的 critical 扩展；此保守策略
+同样应用于以证书形式提供的信任锚。basicConstraints 与 keyUsage 会解析校验；
+critical EKU 仅在叶用途策略明确时处理；critical SAN 仅在叶 DNS 校验开启且全部
+GeneralName 均为受支持 DNS 名称时处理。其余 critical 扩展拒绝，不以“识别 OID”
+代替语义支持。这不表示完整 RFC 5280 policy-tree/nameConstraints 实现。
+
+EC 私钥标量必须处于 1..n-1，公钥坐标必须处于 0..p-1；不会模约减非规范输入。

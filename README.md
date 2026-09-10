@@ -37,18 +37,31 @@
 | 证书 | X.509 / PEM / trust material | 解析、链验证与显式信任材料；非完整 WebPKI/原生系统信任库 |
 | TLS | TLS 1.2 / TLS 1.3 握手构件、record、session、RFC 8998 国密 profile 与 ClientHello profile；TLS 1.3 AES-GCM/ChaCha20-Poly1305 record 使用序列化 5 字节 header 作为 AAD | 独立 AEAD 复算与本地协议流测试，不等于浏览器/OpenSSL/curl 在线互操作 |
 | 国密传输协议 | TLCP / DTLCP 1.1：四套 SM2/SM3/SM4 密码组、双证书、静态 ECC/SM2 ECDHE、CBC/GCM record、数据报 replay/分片/重传构件 | 固定 openHiTLS 语义的库内端到端闭环；不声明外部线上互操作或网络产品完成 |
-| SSH | SSH transport helpers、KEX、packet protection 与 host verification | 无外部 OpenSSH 全流程互操作声明 |
+| SSH | SSH transport helpers、X25519 KEX、packet protection 与 host verification | OpenSSH 10.0p1 三种 AEAD 固定分组差分；无完整登录流程互操作声明 |
 | QUIC | QUIC v1/v2 Initial、显式 AEAD、Header Protection、Retry integrity | 包保护构件，不包含 QUIC transport 或 HTTP/3 |
 | 策略 | FIPS-oriented policy profile 与算法许可检查 | 策略辅助，不构成 FIPS 140 模块认证 |
 | 工具 | Benchmark support、向量与协议测试 | 非跨平台性能承诺 |
 
 完整、可检验的状态与限制见 [Capability Matrix](docs/capability-matrix.md)。
 
+SSH 分组保护已校正 OpenSSH ChaCha 的 64 字节双密钥、AES-GCM 明文长度 AAD、
+经典 transport 对齐及 KDF 编码。已使用/失败状态不能 reset；旧错误线格式不兼容。
+直接接入 transport 时须显式传入已交换分组的方向序号，详见 [SSH 迁移说明](docs/guide/ssh-protocol.md)。
+
 ### TLS 1.3 当前边界
 
 当前覆盖 `TLS_AES_128_GCM_SHA256`、`TLS_AES_256_GCM_SHA384`、`TLS_CHACHA20_POLY1305_SHA256`，以及 RFC 8998 的 `TLS_SM4_GCM_SM3` / `TLS_SM4_CCM_SM3`、`curveSM2` 与 `sm2sig_sm3`。HTTP X25519 ClientHello 会优先携带 `TLS_AES_256_GCM_SHA384`。
 
+HTTP 协商策略默认要求 ALPN。仅当调用方显式启用
+`allowMissingAlpnHttp11Fallback` 且策略同时包含 `http/1.1` 时，服务端才接受未携带
+ALPN 的 ClientHello，并以空的协商值交给上层按 HTTP/1.1 处理；未知的非空 ALPN
+仍会失败关闭。该选项不表示通过 TLS 协商出了 `http/1.1`。
+
 当前不声明 `X25519MLKEM768` key share，也不把本地 handshake/record 测试写成浏览器、OpenSSL 或 curl 线上互通成功。
+
+`Tls13HandshakeSecrets` 现持有私有秘密缓冲区，原同名属性返回独立副本；
+调用方可显式 `destroy()`，重复销毁安全，后续导出失败。调用方须串行持有，
+负责已导出副本和派生上下文的清理；不承诺 GC 副本或物理内存彻底擦除。
 
 TLS 1.3 AES-GCM 与 ChaCha20-Poly1305 记录层认证线上序列化的 5 字节
 `TLSCiphertext` header；最大密文界限包含 `TLSInnerPlaintext` content-type

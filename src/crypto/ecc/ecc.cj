@@ -48,6 +48,9 @@ public class EcPublicKey {
         validateCoordinate(x, "x")
         validateCoordinate(y, "y")
         let params = paramsForCurve(curve)
+        if (x.cmp(params.p) >= 0 || y.cmp(params.p) >= 0) {
+            throw CryptoException(InvalidArgument, "EC public coordinates must be below the field modulus")
+        }
         if (!isPointOnCurve(x, y, params)) {
             throw CryptoException(InvalidArgument, "public key point is not on curve")
         }
@@ -64,6 +67,9 @@ public class EcPrivateKey {
     public init(curve: NamedCurve, scalar: BigNum) {
         if (scalar.isZero() || scalar.isNegative()) {
             throw CryptoException(InvalidArgument, "EC private scalar must be positive")
+        }
+        if (scalar.cmp(paramsForCurve(curve).n) >= 0) {
+            throw CryptoException(InvalidArgument, "EC private scalar must be below the group order")
         }
         this.curve = curve
         this.scalar = scalar
