@@ -182,3 +182,13 @@ PSK 与上下文，后续仍必须完成 PSK+DHE key schedule、ServerHello 与�
 恢复 PSK 派生由 RFC 8448 官方向量回归；票据 age/lifetime/binder/binding/single-use/
 rotation 与 0-RTT 拒绝由本地安全测试覆盖。required mTLS 另有缺失客户端 flight、
 不受信链、CertificateVerify 篡改、transcript 不匹配与 Finished 篡改的负向回归。
+## TLS 1.3 握手秘密的生命周期
+
+`Tls13HandshakeSecrets` 的密钥/secret 属性保留原名，但每次访问返回独立副本；
+修改副本不再修改内部状态。对象提供显式、幂等 `destroy()` 与 `isDestroyed`，
+销毁后 secret/key/IV 属性访问失败。由调用方串行持有，在替换、失败和会话结束
+时销毁；已经导出的副本及由其构造的 record 上下文另有独立所有权。
+
+清理是自有缓冲区的尽力确定性覆盖，不依赖析构器，不声称清除了 GC 迁移副本、
+原语内部临时分配、调用方副本或物理内存。该生命周期不等于全部 TLS/SSH/AES
+对象都已具备自动清理。

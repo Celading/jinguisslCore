@@ -59,6 +59,10 @@ ALPN 的 ClientHello，并以空的协商值交给上层按 HTTP/1.1 处理；�
 
 当前不声明 `X25519MLKEM768` key share，也不把本地 handshake/record 测试写成浏览器、OpenSSL 或 curl 线上互通成功。
 
+`Tls13HandshakeSecrets` 现持有私有秘密缓冲区，原同名属性返回独立副本；
+调用方可显式 `destroy()`，重复销毁安全，后续导出失败。调用方须串行持有，
+负责已导出副本和派生上下文的清理；不承诺 GC 副本或物理内存彻底擦除。
+
 TLS 1.3 AES-GCM 与 ChaCha20-Poly1305 记录层认证线上序列化的 5 字节
 `TLSCiphertext` header；最大密文界限包含 `TLSInnerPlaintext` content-type
 字节和 16 字节 AEAD tag。回归测试以独立 AEAD 调用复算密文/tag，避免同一
