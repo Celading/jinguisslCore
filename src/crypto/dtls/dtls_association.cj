@@ -362,7 +362,11 @@ class DtlsAssociationState {
             var ems = false
             for (ext in hello.extensions) {
                 if (ext.kind == 23) { dtlsRequire(ext.data.size == 0, "invalid EMS extension"); ems = true }
-                else if (ext.kind == 11) { dtlsRequire(ext.data == [UInt8(1), UInt8(0)], "unsupported EC point format") }
+                else if (ext.kind == 11) {
+                    let r = DtlsReader(ext.data)
+                    let formats = r.take(r.u8()); r.end()
+                    dtlsRequire(formats.contains(UInt8(0)), "server must support uncompressed EC points")
+                }
                 else if (ext.kind == 0xff01) { dtlsRequire(ext.data == [UInt8(0)], "renegotiation is unsupported") }
                 else { dtlsRequire(false, "unsolicited DTLS server extension") }
             }

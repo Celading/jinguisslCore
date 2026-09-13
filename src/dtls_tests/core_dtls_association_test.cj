@@ -182,4 +182,27 @@ public class DtlsAssociationTestSuite {
         }
         @Fail("server did not finish")
     }
+
+    @TestCase
+    public func testServerPointFormatsAreASupportedListNotASingleSelection(): Unit {
+        let identity = associationIdentity()
+        let cases: Array<Array<Byte>> = [[3, 0, 1, 2], [2, 1, 2], [2, 0], [0], [1, 0, 4]]
+        for (i in 0..cases.size) {
+            let client = DtlsAssociation(DtlsRole.Client, identity, identity.fingerprintSha256(), [UInt8(1)])
+            client.start(0); _ = client.takeOutput()
+            let hello = DtlsServerHello(DTLS_VERSION_1_2, DtlsRandom.decode(Array<Byte>(32, repeat: 1)), [],
+                UInt16(0xc02b), UInt8(0), UInt16(7), extensions: [DtlsExtension(UInt16(23), []),
+                    DtlsExtension(UInt16(11), cases[i])]).encode()
+            let fragment = dtlsEncodeHandshakeFragment(DtlsHandshakeFragment(DtlsHandshakeType.ServerHello,
+                UInt32(hello.size), UInt16(0), UInt32(0), UInt32(hello.size), hello))
+            let record = dtlsEncodeRecord(DtlsContentType.Handshake, DTLS_VERSION_1_2, UInt16(0), UInt48(UInt64(0)), fragment)
+            var rejected = false
+            try { _ = client.receive(record, 1) } catch (_: CryptoException) { rejected = true }
+            @Assert(rejected, i != 0)
+            @Assert(client.isClosed, i != 0)
+            @Assert(!client.authenticated)
+            client.close()
+        }
+        identity.destroy()
+    }
 }
