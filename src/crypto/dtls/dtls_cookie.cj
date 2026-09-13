@@ -24,8 +24,8 @@ import jinguissl_core.crypto.utils.csprngBytes
 // The secretId selects which secret to use (0 = current, 1 = previous
 // during overlap). The timestamp is the cookie's issuance time; the
 // verifier rejects cookies older than `ttlMs`. The HMAC is computed over
-// `secretId || timestamp || clientIp || clientPort || version ||
-// clientRandom || cipherSuites || srtpProfiles` using the selected secret.
+// `secretId || timestamp || length-prefixed binding || clientPort || version ||
+// clientRandom || length-prefixed cipherSuites || length-prefixed srtpProfiles`.
 //
 // The manager holds at most two secrets: `_current` and `_previous`.
 // `rotate()` promotes current to previous and generates a fresh current.
@@ -107,6 +107,8 @@ public class DtlsCookieManager {
         clientIp: Array<Byte>, clientPort: UInt16, version: UInt16,
         clientRandom: Array<Byte>, cipherSuites: Array<UInt16>,
         srtpProfiles: Array<UInt16>): Array<Byte> {
+        dtlsRequire(clientIp.size > 0 && clientIp.size <= 64 && clientRandom.size == 32 &&
+            cipherSuites.size <= 32767 && srtpProfiles.size <= 32767, "invalid DTLS cookie binding")
         let buf = ArrayList<Byte>()
         buf.add(secretId)
         // timestampMs as 8-byte big-endian
@@ -119,6 +121,7 @@ public class DtlsCookieManager {
         buf.add(UInt8(UInt64(timestampMs) >> UInt64(8) & UInt64(0xFF)))
         buf.add(UInt8(UInt64(timestampMs) & UInt64(0xFF)))
         // client IP (canonical, caller-supplied)
+        for (b in dtlsU16(clientIp.size)) { buf.add(b) }
         for (b in clientIp) { buf.add(b) }
         // client port (2 BE)
         buf.add(UInt8((clientPort >> 8) & UInt16(0xFF)))
@@ -129,11 +132,13 @@ public class DtlsCookieManager {
         // client random
         for (b in clientRandom) { buf.add(b) }
         // cipher suites (each 2 BE)
+        for (b in dtlsU16(cipherSuites.size * 2)) { buf.add(b) }
         for (cs in cipherSuites) {
             buf.add(UInt8((cs >> 8) & UInt16(0xFF)))
             buf.add(UInt8(cs & UInt16(0xFF)))
         }
         // srtp profiles (each 2 BE)
+        for (b in dtlsU16(srtpProfiles.size * 2)) { buf.add(b) }
         for (p in srtpProfiles) {
             buf.add(UInt8((p >> 8) & UInt16(0xFF)))
             buf.add(UInt8(p & UInt16(0xFF)))
@@ -149,6 +154,7 @@ public class DtlsCookieManager {
         version: UInt16, clientRandom: Array<Byte>,
         cipherSuites: Array<UInt16>, srtpProfiles: Array<UInt16>,
         nowMs: Int64): Array<Byte> {
+        dtlsRequire(nowMs >= 0, "DTLS cookie clock must be nonnegative")
         let secretId = UInt8(0)  // current secret
         let input = buildHmacInput(secretId, nowMs, clientIp, clientPort,
             version, clientRandom, cipherSuites, srtpProfiles)
@@ -200,7 +206,9 @@ public class DtlsCookieManager {
         cipherSuites: Array<UInt16>, srtpProfiles: Array<UInt16>,
         nowMs: Int64): Bool {
         // Cookie = secretId (1) || timestamp (8 BE) || HMAC (32)
-        if (cookie.size != 1 + 8 + 32) {
+        if (cookie.size != 1 + 8 + 32 || nowMs < 0 || (cookie[1] & 0x80) != 0 ||
+            clientIp.size == 0 || clientIp.size > 64 || clientRandom.size != 32 ||
+            cipherSuites.size > 32767 || srtpProfiles.size > 32767) {
             return false
         }
         let secretId = cookie[0]
@@ -214,13 +222,13 @@ public class DtlsCookieManager {
                                  UInt64(cookie[8]))
 
         // Expiry check: reject cookies older than ttlMs.
-        if (nowMs - timestampMs > _ttlMs) {
+        if (nowMs >= timestampMs && nowMs - timestampMs > _ttlMs) {
             return false
         }
         // Defensive: reject cookies with a future timestamp beyond ttlMs
         // (clock-skew tolerance). A small future skew is allowed; a large
         // one is treated as forgery.
-        if (timestampMs - nowMs > _ttlMs) {
+        if (timestampMs >= nowMs && timestampMs - nowMs > _ttlMs) {
             return false
         }
 

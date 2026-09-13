@@ -4,7 +4,7 @@
   "readme": "README.md",
   "matrix": "docs/capability-matrix.md",
   "publicSourceGlobs": ["src/**/*.cj"],
-  "excludeSourceGlobs": ["src/tests/**"],
+  "excludeSourceGlobs": ["src/tests/**", "src/dtls_tests/**"],
   "forbiddenPublicText": [
     {
       "pattern": "FIPS 140 合规性管理",
@@ -23,6 +23,18 @@
     }
   ],
   "capabilities": [
+    {
+      "id": "dtls12-association",
+      "label": "DTLS 1.2 fingerprint-authenticated association",
+      "status": "implemented-local-test",
+      "summary": "纯仓颉双角色会话、P-256身份、X25519、AES128-GCM、EMS、SRTP exporter与有界重传。",
+      "proof": "OpenSSL 3.6.4 双角色×SRTP7/1四组，双向认证/应用数据/exporter逐字节一致；丢包、乱序、伪造身份、解析/replay反例。",
+      "limits": "显式可信fingerprint而非PKIX；不提供媒体协议、DTLS1.3、PSK、重协商或恢复；本机证明不是远端CI或安全认证。",
+      "sourceGlobs": ["src/crypto/dtls/*.cj"],
+      "testGlobs": ["src/dtls_tests/*.cj"],
+      "readmeTokens": ["DTLS 1.2"],
+      "manualPages": ["docs/guide/dtls.md"]
+    },
     {
       "id": "foundation-utils",
       "label": "基础类型、错误与安全字节工具",
