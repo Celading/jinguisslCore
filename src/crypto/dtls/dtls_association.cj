@@ -234,7 +234,9 @@ class DtlsAssociationState {
                 acceptFragment(fragment, now)
             }
         } else if (header.contentType == DtlsContentType.ApplicationData) {
-            dtlsRequire(authenticated && header.epoch == 1, "DTLS application data before authentication")
+            // UDP can deliver application records ahead of the peer's Finished.
+            // Drop them without delivery or authentication-state promotion.
+            if (!authenticated || header.epoch != 1) { return }
             data.add(plain.clone()); flight.clear()
         } else if (header.contentType == DtlsContentType.Alert) {
             if (header.epoch == 0 && epochState.isSome()) { return }
