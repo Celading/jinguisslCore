@@ -154,4 +154,32 @@ public class DtlsAssociationTestSuite {
         @Assert(!manager.verifyCookie(cookie, [UInt8(1)], UInt16(3), DTLS_VERSION_1_2, random,
             [UInt16(0xc02b)], [UInt16(7), UInt16(1)], Int64.Max))
     }
+
+    @TestCase
+    public func testApplicationOvertakesServerFinishedWithoutClosingClient(): Unit {
+        let a = associationIdentity(); let b = associationIdentity()
+        let client = DtlsAssociation(DtlsRole.Client, a, b.fingerprintSha256(), [UInt8(1)])
+        let server = DtlsAssociation(DtlsRole.Server, b, a.fingerprintSha256(), [UInt8(1)])
+        client.start(0); server.start(0)
+        for (tick in 1..10) {
+            for (wire in client.takeOutput()) { _ = server.receive(wire, tick * 100) }
+            let output = server.takeOutput()
+            if (server.authenticated) {
+                @Assert(!client.authenticated)
+                let earlyApp = server.sealApplicationData("overtook-finished".toArray())
+                // Server flight is CCS then Finished. Test application between them.
+                @Assert(output.size, 2)
+                _ = client.receive(output[0], tick * 100)
+                @Assert(client.receive(earlyApp, tick * 100).size, 0)
+                @Assert(!client.authenticated && !client.isClosed)
+                _ = client.receive(output[1], tick * 100)
+                @Assert(client.authenticated)
+                @Assert(client.receive(server.sealApplicationData("after-finished".toArray()), tick * 100)[0],
+                    "after-finished".toArray())
+                client.close(); server.close(); a.destroy(); b.destroy(); return
+            }
+            for (wire in output) { _ = client.receive(wire, tick * 100) }
+        }
+        @Fail("server did not finish")
+    }
 }
