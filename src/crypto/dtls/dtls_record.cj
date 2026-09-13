@@ -229,6 +229,7 @@ public func dtlsDecodeRecordHeader(data: Array<Byte>): DtlsRecordHeader {
 /// Encode a complete DTLS record (header + fragment).
 public func dtlsEncodeRecord(contentType: DtlsContentType, version: UInt16,
     epoch: UInt16, sequenceNumber: UInt48, fragment: Array<Byte>): Array<Byte> {
+    dtlsRequire(fragment.size <= 18432, "DTLS ciphertext record exceeds protocol bound")
     let header = DtlsRecordHeader(contentType, version, epoch,
         sequenceNumber, UInt16(fragment.size))
     let headerBytes = dtlsEncodeRecordHeader(header)

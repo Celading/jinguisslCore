@@ -468,10 +468,13 @@ public class DtlsHandshakeContext {
     }
 
     /// Set peer's X25519 public key and derive shared secret
-    public func processPeerKeyExchange(peerPublicKey: Array<Byte>): Unit {
+    public func processPeerKeyExchange(peerPublicKey: Array<Byte>, sessionHash!: Array<Byte> = []): Unit {
         let preMaster = keyExchange.processPeerPublicKey(peerPublicKey)
         // Derive master secret
-        let ms = dtlsDeriveMasterSecret(preMaster, clientRandom, serverRandom)
+        dtlsRequire(sessionHash.size == 0 || sessionHash.size == 32, "invalid DTLS session hash")
+        let ms = if (sessionHash.size == 32) {
+            dtlsPrf(preMaster, "extended master secret", sessionHash, 48)
+        } else { dtlsDeriveMasterSecret(preMaster, clientRandom, serverRandom) }
         masterSecret = ms
 
         // Derive AEAD key block (AES-128-GCM: key=16, IV=4)
@@ -569,6 +572,9 @@ public class DtlsHandshakeContext {
             throw CryptoException(CryptoErrorCode.InvalidArgument,
                 "expected fingerprint must be 64 hex chars (SHA-256), got " +
                 normalized.size.toString())
+        }
+        for (b in normalized.toArray()) {
+            dtlsRequire((b >= 48 && b <= 57) || (b >= 97 && b <= 102), "invalid SHA-256 fingerprint hex")
         }
         expectedFingerprint = normalized
     }

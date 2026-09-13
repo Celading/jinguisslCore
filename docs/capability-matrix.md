@@ -19,6 +19,7 @@
 
 | Capability | Status | Public surface | Evidence | Manual | Current limit |
 | --- | --- | --- | --- | --- | --- |
+| `dtls12-association` DTLS 1.2 fingerprint-authenticated association | `implemented-local-test` | 纯仓颉双角色会话、P-256身份、X25519、AES128-GCM、EMS、SRTP exporter与有界重传。 | OpenSSL 3.6.4 双角色×SRTP7/1四组，双向认证/应用数据/exporter逐字节一致；丢包、乱序、伪造身份、解析/replay反例。 | [`dtls.md`](guide/dtls.md) | 显式可信fingerprint而非PKIX；不提供媒体协议、DTLS1.3、PSK、重协商或恢复；本机证明不是远端CI或安全认证。 |
 | `foundation-utils` 基础类型、错误与安全字节工具 | `internal-or-placeholder` | SecureBytes、ByteBuffer、错误码、端序转换、安全比较、清零与 CSPRNG 边界。 | foundation/base/utils/edge-case tests | [`modules.md`](api/modules.md) | 支撑层；constantTimeEquals 不代表所有私钥运算均为恒定时间。 |
 | `digest-kdf-mac` Digest / HMAC / HKDF | `production-candidate-with-limits` | SHA-256/384/512、HMAC、HKDF，以及仅兼容用途的 MD5/SHA-1。 | known vectors and protocol-boundary regressions | [`crypto-primitives.md`](guide/crypto-primitives.md)<br>[`modules.md`](api/modules.md) | MD5 与 SHA-1 仅用于遗留兼容；无外部安全认证。 |
 | `aes` AES block / ECB / CBC / CTR / GCM | `production-candidate-with-limits` | AES 基础模式、GCM、checked/into API、引擎选择与桥接探测。 | block/mode/GCM vectors and engine-selection tests | [`crypto-primitives.md`](guide/crypto-primitives.md)<br>[`modules.md`](api/modules.md) | 无硬件后端认证；ECB/CBC 不是现代 AEAD 默认方案。 |
