@@ -23,6 +23,10 @@
 
 ## 能力概览
 
+新增 [BLAKE2s、HChaCha20 / XChaCha20-Poly1305](docs/guide/extended-crypto.md)：
+纯仓颉实现、原生短摘要与 keyed 模式、标准/独立向量及负向验证。
+SSH 包保护支持有界首块长度检查，探测不消耗序号或 CTR 状态；应用优先使用主桥流式入口。
+
 新增 [DTLS 1.2 会话](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/dtls.md)：双角色、可信证书指纹、私钥证明、
 EMS 与 SRTP exporter；OpenSSL 双角色/双 profile 本机互操作通过。
 应用与媒体消费者优先使用主桥的 `ContractDtlsSession`，无需手工编排内核认证状态。
