@@ -220,12 +220,12 @@
       "label": "TLCP / DTLCP 1.1",
       "status": "implemented-local-test",
       "summary": "0x0101 hello、四套 SM2/SM3/SM4 密码组、签名/加密双证书、静态 ECC 与 SM2 ECDHE、SM3 PRF/Finished、CBC/GCM record，以及 DTLCP epoch/replay/fragment/retransmit 构件。",
-      "proof": "pinned openHiTLS wire constants and state semantics, static-ECC/ECDHE end-to-end local flows, bidirectional CBC/GCM, tamper/identity/replay/fragment negatives",
-      "limits": "当前是库内可组合协议流与记录层，不声明 socket server/client、openHiTLS 线上互操作、拥塞/MTU 策略或商密认证。",
-      "sourceGlobs": ["src/crypto/tls/tlcp.cj", "src/crypto/tls/tlcp_record.cj", "src/crypto/tls/dtlcp.cj"],
+      "proof": "TLCP owned session: openHiTLS 586d8aa 双角色×四套共八组双向证书认证/应用数据；Finished、身份、分片、时钟与篡改负向；DTLCP 仍为本地构件回归。",
+      "limits": "实验性纯仓颉 TLCP 流引擎；调用方拥有 socket/clock。无 ALPN、HTTP/2、恢复、重协商或商密认证；不声明 DTLCP 外部互通、MTU/拥塞策略。",
+      "sourceGlobs": ["src/crypto/tls/tlcp*.cj", "src/crypto/tls/dtlcp.cj"],
       "testGlobs": ["src/tests/core_tlcp_test.cj", "src/tests/core_dtlcp_test.cj"],
       "readmeTokens": ["TLCP / DTLCP"],
-      "manualPages": ["docs/guide/gm-crypto.md", "docs/guide/tls-protocol.md", "docs/api/modules.md"]
+      "manualPages": ["docs/guide/tlcp-provider.md", "docs/guide/gm-crypto.md", "docs/guide/tls-protocol.md", "docs/api/modules.md"]
     },
     {
       "id": "ssh",

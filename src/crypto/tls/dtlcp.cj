@@ -108,6 +108,7 @@ public class DtlcpRecordLayer {
     var _writeSequence: Int64 = 0
 
     public init(secrets: TlcpHandshakeSecrets, isClient: Bool, epoch!: Int64 = 0) {
+        if (secrets.isDestroyed) { throw CryptoException(InvalidArgument, "TLCP secrets destroyed") }
         if (epoch < 0 || epoch > 0xffff) {
             throw CryptoException(OutOfBounds, "DTLCP epoch is out of range")
         }

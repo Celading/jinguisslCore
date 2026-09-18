@@ -132,8 +132,9 @@ DTLCP 使用 13 字节 record header（type、`0x0101`、epoch、48 位 sequence
 `DtlcpHandshakeReassembler` 处理 12 字节握手分片头、乱序片段和一致 overlap；
 `DtlcpFlightRetransmitter` 提供缓存 flight、最大次数和指数退避状态。
 
-这些是库内可组合协议构件，不含 socket client/server、定时器、MTU/拥塞策略，也不声明
-已经通过 openHiTLS 线上互操作或商密认证。更完整的算法与 PKI 边界见
+TLCP 的 `TlcpSession` 管理认证握手与记录层，已对固定 openHiTLS 重放双角色×四套互通，
+详见 [TLCP provider](tlcp-provider.md)。调用方仍拥有 socket 和 clock；DTLCP 仍为构件，
+不声明外部互通、MTU/拥塞策略或商密认证。更完整的算法与 PKI 边界见
 [国密能力指南](gm-crypto.md)。
 
 ## 记录层
