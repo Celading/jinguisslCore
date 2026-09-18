@@ -12,6 +12,52 @@ public let POLY1305_KEY_LEN: Int64 = 32
 public let POLY1305_TAG_LEN: Int64 = 16
 public let CHACHA20_POLY1305_TAG_LEN: Int64 = POLY1305_TAG_LEN
 
+/// HChaCha20 from draft-irtf-cfrg-xchacha-03, section 2.2.
+public func hchacha20(key: Array<Byte>, nonce: Array<Byte>): Array<Byte> {
+    if (key.size != 32 || nonce.size != 16) {
+        throw CryptoException(InvalidArgument, "HChaCha20 requires a 32-byte key and 16-byte nonce")
+    }
+    let state = Array<UInt32>(16, repeat: 0)
+    state[0] = 0x61707865; state[1] = 0x3320646e
+    state[2] = 0x79622d32; state[3] = 0x6b206574
+    for (i in 0..8) { state[4+i] = decodeUInt32LE(key, 4*i) }
+    for (i in 0..4) { state[12+i] = decodeUInt32LE(nonce, 4*i) }
+    for (_ in 0..10) {
+        chachaQuarterRound(state, 0,4,8,12); chachaQuarterRound(state, 1,5,9,13)
+        chachaQuarterRound(state, 2,6,10,14); chachaQuarterRound(state, 3,7,11,15)
+        chachaQuarterRound(state, 0,5,10,15); chachaQuarterRound(state, 1,6,11,12)
+        chachaQuarterRound(state, 2,7,8,13); chachaQuarterRound(state, 3,4,9,14)
+    }
+    let output = Array<Byte>(32, repeat: 0)
+    for (i in 0..4) {
+        encodeUInt32LE(output, 4*i, state[i])
+        encodeUInt32LE(output, 16+4*i, state[12+i])
+    }
+    for (i in 0..16) { state[i] = 0 }
+    output
+}
+
+public func xchacha20Poly1305Encrypt(key: Array<Byte>, nonce: Array<Byte>,
+    plaintext: Array<Byte>, aad!: Array<Byte> = []): (Array<Byte>, Array<Byte>) {
+    let (subkey, innerNonce) = xchachaMaterial(key, nonce)
+    try { chacha20Poly1305Encrypt(subkey, innerNonce, plaintext, aad: aad) }
+    finally { for (i in 0..subkey.size) { subkey[i] = 0 } }
+}
+
+public func xchacha20Poly1305Decrypt(key: Array<Byte>, nonce: Array<Byte>,
+    ciphertext: Array<Byte>, tag: Array<Byte>, aad!: Array<Byte> = []): Array<Byte> {
+    let (subkey, innerNonce) = xchachaMaterial(key, nonce)
+    try { chacha20Poly1305Decrypt(subkey, innerNonce, ciphertext, tag, aad: aad) }
+    finally { for (i in 0..subkey.size) { subkey[i] = 0 } }
+}
+
+private func xchachaMaterial(key: Array<Byte>, nonce: Array<Byte>): (Array<Byte>, Array<Byte>) {
+    if (nonce.size != 24) { throw CryptoException(InvalidArgument, "XChaCha20 requires a 24-byte nonce") }
+    let innerNonce = Array<Byte>(12, repeat: 0)
+    for (i in 0..8) { innerNonce[4+i] = nonce[16+i] }
+    (hchacha20(key, nonce[..16]), innerNonce)
+}
+
 private let CHACHA20_CONST_0: UInt32 = UInt32(0x6170_7865)
 private let CHACHA20_CONST_1: UInt32 = UInt32(0x3320_646e)
 private let CHACHA20_CONST_2: UInt32 = UInt32(0x7962_2d32)

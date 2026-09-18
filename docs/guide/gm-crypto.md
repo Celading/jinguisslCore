@@ -155,8 +155,9 @@ CBC 是 MAC-then-encrypt 并使用显式随机 IV；GCM 使用 4 字节 fixed IV
 拒绝冲突 overlap；`DtlcpFlightRetransmitter` 只管理缓存 flight 与指数退避状态，计时和
 网络发送仍由调用方 event loop 负责。
 
-当前公开面是可组合的握手消息、密钥计划和记录层，不包括 socket client/server、
-MTU/拥塞策略或 openHiTLS 在线互操作声明。
+TLCP 还提供拥有身份副本、认证状态和关闭生命周期的 `TlcpSession`，见
+[TLCP provider](tlcp-provider.md)。固定 openHiTLS 的双角色×四套互通已经重放；
+socket、clock 仍由调用方拥有。DTLCP 仍是构件，不声明外部互通或 MTU/拥塞策略。
 
 ## 实现与安全边界
 

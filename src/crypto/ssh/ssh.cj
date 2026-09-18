@@ -668,6 +668,14 @@ public class SshPacketProtectionLayer {
     public func open(encodedPacket: Array<Byte>): SshTransportPacket {
         _readState.open(encodedPacket)
     }
+
+    public prop readPrefixLength: Int64 { get() { _readState.prefixLength } }
+
+    /// Unauthenticated length is used only for bounded framing, never delivered as payload.
+    /// Does not consume sequence numbers or CTR blocks. Failure is terminal.
+    public func encodedPacketSize(prefix: Array<Byte>, maximum!: Int64 = 262144): Int64 {
+        _readState.encodedPacketSize(prefix, maximum)
+    }
 }
 
 public class SshHandshakeCoordinator {
@@ -961,6 +969,34 @@ private class SshPacketCipherState {
     }
 
     public prop sequence: Int64 { get() { _sequence } }
+
+    public prop prefixLength: Int64 {
+        get() { if (_aeadTagLen != 0 || material.cipherName == "none") { 4 } else { _blockSize } }
+    }
+
+    public func encodedPacketSize(prefix: Array<Byte>, maximum: Int64): Int64 {
+        ensureReady()
+        try {
+            if (prefix.size < prefixLength || maximum < 16 || maximum > 1048576) {
+                throw CryptoException(InvalidArgument, "SSH prefix or packet budget is invalid")
+            }
+            var header = prefix[..4].clone()
+            if (material.cipherName == SSH_CIPHER_CHACHA20_POLY1305_OPENSSH) {
+                header = chacha20XorWithContext(requireChachaHeader(), sshChachaPacketNonce(_sequence), header)
+            } else if (_aeadTagLen == 0 && material.cipherName != "none") {
+                header = sshCipherPacket(material.cipherName, material.encryptionKey, _counter,
+                    prefix[..prefixLength])[..4]
+            }
+            let length = decodeUInt32(header, 0, "packet_length")
+            let alignedLength = if (_aeadTagLen != 0) { length } else { length + 4 }
+            let tagLength = if (_aeadTagLen != 0) { _aeadTagLen } else { sshMacDigestLength(material.macName) }
+            let total = length + 4 + tagLength
+            if (length < 5 || alignedLength % _blockSize != 0 || total > maximum) {
+                throw CryptoException(ParseError, "SSH protected packet length exceeds framing policy")
+            }
+            total
+        } catch (e: CryptoException) { _failed = true; throw e }
+    }
 
     public func reset(): Unit {
         if (_used || _failed || _exhausted) {

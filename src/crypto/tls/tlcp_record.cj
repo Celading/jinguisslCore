@@ -23,6 +23,15 @@ public class TlcpHandshakeSecrets {
     public let serverWriteKey: Array<Byte>
     public let clientWriteIv: Array<Byte>
     public let serverWriteIv: Array<Byte>
+    private var _destroyed: Bool = false
+    public prop isDestroyed: Bool { get() { _destroyed } }
+
+    /** Wipe these owned arrays; caller copies and runtime temporaries are outside ownership. */
+    public func destroy(): Unit {
+        _destroyed = true
+        for (bytes in [masterSecret, clientMacKey, serverMacKey, clientWriteKey,
+            serverWriteKey, clientWriteIv, serverWriteIv]) { tlcpWipe(bytes) }
+    }
 
     public init(
         cipherSuite: TlcpCipherSuite,
@@ -134,8 +143,10 @@ public class TlcpRecordLayer {
     let _readIv: Array<Byte>
     var _writeSequence: Int64 = 0
     var _readSequence: Int64 = 0
+    var _destroyed: Bool = false
 
     public init(secrets: TlcpHandshakeSecrets, isClient: Bool) {
+        if (secrets.isDestroyed) { throw CryptoException(InvalidArgument, "TLCP secrets destroyed") }
         this.cipherSuite = secrets.cipherSuite
         if (isClient) {
             this._writeMacKey = secrets.clientMacKey.clone()
@@ -156,8 +167,18 @@ public class TlcpRecordLayer {
 
     public prop writeSequence: Int64 { get() { _writeSequence } }
     public prop readSequence: Int64 { get() { _readSequence } }
+    public prop isDestroyed: Bool { get() { _destroyed } }
+
+    /** Caller serializes operations, as for seal/open. Irreversibly retire this layer. */
+    public func destroy(): Unit {
+        _destroyed = true
+        for (bytes in [_writeMacKey, _readMacKey, _writeKey, _readKey, _writeIv, _readIv]) {
+            tlcpWipe(bytes)
+        }
+    }
 
     public func seal(contentType: TlsContentType, plaintext: Array<Byte>): Array<Byte> {
+        if (_destroyed) { throw CryptoException(InvalidArgument, "TLCP record layer destroyed") }
         if (plaintext.size > TLS_MAX_PLAINTEXT_LEN) {
             throw CryptoException(OutOfBounds, "TLCP plaintext exceeds max fragment size")
         }
@@ -177,6 +198,7 @@ public class TlcpRecordLayer {
     }
 
     public func open(encodedRecord: Array<Byte>): TlcpPlainRecord {
+        if (_destroyed) { throw CryptoException(InvalidArgument, "TLCP record layer destroyed") }
         let (contentType, protected) = tlcpDecodeRecord(encodedRecord)
         let sequence = tlcpRecordSequence(_readSequence)
         let plaintext = tlcpOpenProtectedFragment(
