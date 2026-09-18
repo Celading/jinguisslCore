@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Cangjie-JinguiSSL%20Core-c96b2c?style=for-the-badge&labelColor=1f2430" alt="JinguiSSL Core" />
-  <img src="https://img.shields.io/badge/version-0.7.6-c96b2c?style=for-the-badge&labelColor=1f2430" alt="Version 0.7.6" />
+  <img src="https://img.shields.io/badge/version-0.8.0-c96b2c?style=for-the-badge&labelColor=1f2430" alt="Version 0.8.0" />
   <img src="https://img.shields.io/badge/package-static-2f855a?style=for-the-badge&labelColor=1f2430" alt="Static Package" />
   <img src="https://img.shields.io/badge/focus-crypto%20%2B%20protocol-3182ce?style=for-the-badge&labelColor=1f2430" alt="Crypto and Protocol" />
   <img src="https://img.shields.io/badge/license-LGPL--3.0--only-1f9d55?style=for-the-badge&labelColor=1f2430" alt="LGPL-3.0-only" />
@@ -23,6 +23,14 @@
 
 ## 能力概览
 
+新增 [BLAKE2s、HChaCha20 / XChaCha20-Poly1305](docs/guide/extended-crypto.md)：
+纯仓颉实现、原生短摘要与 keyed 模式、标准/独立向量及负向验证。
+SSH 包保护支持有界首块长度检查，探测不消耗序号或 CTR 状态；应用优先使用主桥流式入口。
+
+新增 [DTLS 1.2 会话](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/dtls.md)：双角色、可信证书指纹、私钥证明、
+EMS 与 SRTP exporter；OpenSSL 双角色/双 profile 本机互操作通过。
+应用与媒体消费者优先使用主桥的 `ContractDtlsSession`，无需手工编排内核认证状态。
+
 | 领域 | 当前公开面 | 证据边界 |
 |:--|:--|:--|
 | 基础支撑 | 安全字节工具、错误类型、端序、安全比较、清零、CSPRNG | 支撑层，不代表所有私钥路径均为恒定时间 |
@@ -36,17 +44,17 @@
 | 大数 | BigNum 与大数兼容层 | 依赖标准库 BigInt，不是恒定时间大数后端 |
 | 证书 | X.509 / PEM / trust material | 解析、链验证与显式信任材料；非完整 WebPKI/原生系统信任库 |
 | TLS | TLS 1.2 / TLS 1.3 握手构件、record、session、RFC 8998 国密 profile 与 ClientHello profile；TLS 1.3 AES-GCM/ChaCha20-Poly1305 record 使用序列化 5 字节 header 作为 AAD | 独立 AEAD 复算与本地协议流测试，不等于浏览器/OpenSSL/curl 在线互操作 |
-| 国密传输协议 | TLCP / DTLCP 1.1：四套 SM2/SM3/SM4 密码组、双证书、静态 ECC/SM2 ECDHE、CBC/GCM record、数据报 replay/分片/重传构件 | 固定 openHiTLS 语义的库内端到端闭环；不声明外部线上互操作或网络产品完成 |
+| 国密传输协议 | TLCP / DTLCP 1.1：TLCP 四套密码组、owned session、双证书认证；DTLCP replay/分片/重传构件 | TLCP 对固定 openHiTLS 双角色×四套八组互通；实验性、无认证、DTLCP 仅本地构件 |
 | SSH | SSH transport helpers、X25519 KEX、packet protection 与 host verification | OpenSSH 10.0p1 三种 AEAD 固定分组差分；无完整登录流程互操作声明 |
 | QUIC | QUIC v1/v2 Initial、显式 AEAD、Header Protection、Retry integrity | 包保护构件，不包含 QUIC transport 或 HTTP/3 |
 | 策略 | FIPS-oriented policy profile 与算法许可检查 | 策略辅助，不构成 FIPS 140 模块认证 |
 | 工具 | Benchmark support、向量与协议测试 | 非跨平台性能承诺 |
 
-完整、可检验的状态与限制见 [Capability Matrix](docs/capability-matrix.md)。
+完整、可检验的状态与限制见 [Capability Matrix](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/capability-matrix.md)。
 
 SSH 分组保护已校正 OpenSSH ChaCha 的 64 字节双密钥、AES-GCM 明文长度 AAD、
 经典 transport 对齐及 KDF 编码。已使用/失败状态不能 reset；旧错误线格式不兼容。
-直接接入 transport 时须显式传入已交换分组的方向序号，详见 [SSH 迁移说明](docs/guide/ssh-protocol.md)。
+直接接入 transport 时须显式传入已交换分组的方向序号，详见 [SSH 迁移说明](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/ssh-protocol.md)。
 
 ### TLS 1.3 当前边界
 
@@ -101,7 +109,7 @@ RC4 不属于当前维护主线。未来若确有旧系统互通需求，应作�
 
 ```toml
 [dependencies]
-jinguissl_core = { git = "https://gitcode.com/CjKu/JinguiCore.git" }
+jinguissl_core = "0.8.0"
 ```
 
 ```cangjie
@@ -122,7 +130,7 @@ Ed25519、RSA、ECC、TLS、SSH 与 QUIC 都有公开 API，但它们不是同�
 | `crypto/aes` | AES block、CTR、CBC、GCM 与 engine helper |
 | `crypto/chacha20` | ChaCha20、Poly1305 与 AEAD |
 | `crypto/digest` | Hash、HMAC、HKDF |
-| `crypto/sm2` / `crypto/sm3` / `crypto/sm4` / `crypto/drbg` | 国密基础算法、扩展模式/MAC 与 GM-DRBG；详见 [国密算法指南](docs/guide/gm-crypto.md) |
+| `crypto/sm2` / `crypto/sm3` / `crypto/sm4` / `crypto/drbg` | 国密基础算法、扩展模式/MAC 与 GM-DRBG；详见 [国密算法指南](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/gm-crypto.md) |
 | `crypto/sm9` | SM9 配对、身份签名、加密与密钥交换 |
 | `crypto/rsa` / `crypto/ecc` / `crypto/ed25519` / `crypto/x25519` | 非对称与密钥协商能力 |
 | `crypto/x509` | 证书、私钥、链验证、SM2 PKI 与 PEM/DER |
@@ -157,21 +165,21 @@ bash scripts/jinguissl_pre_review.sh <base-ref>
 提交前门禁会检查公开残留、托管依赖图、依赖锁、能力矩阵、README/manual 同步、构建和完整测试。
 
 本仓不另造测试 runner 或结果数据库。托管 CI 公开每个 commit 的 step 结果，并上传只含
-commit/工具链、构建日志和完整测试日志的证据 artifact；详见[公开测试面](docs/public-testing.md)。
+commit/工具链、构建日志和完整测试日志的证据 artifact；详见[公开测试面](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/public-testing.md)。
 Wycheproof、fuzz、恒定时认证和外部协议互操作在真正接入独立 lane 前继续明确标为未覆盖，
 不能只看总测试数推导安全成熟度。
 
 ## 文档
 
-- [使用手册入口](docs/README.md)
-- [能力矩阵](docs/capability-matrix.md)
-- [公开测试面与结果契约](docs/public-testing.md)
-- [密码原语](docs/guide/crypto-primitives.md)
-- [X.509](docs/guide/x509-certificates.md)
-- [TLS](docs/guide/tls-protocol.md)
-- [SSH](docs/guide/ssh-protocol.md)
-- [QUIC 包保护](docs/guide/quic-protection.md)
-- [算法许可与 policy profile](docs/guide/compliance.md)
+- [使用手册入口](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/README.md)
+- [能力矩阵](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/capability-matrix.md)
+- [公开测试面与结果契约](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/public-testing.md)
+- [密码原语](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/crypto-primitives.md)
+- [X.509](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/x509-certificates.md)
+- [TLS](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/tls-protocol.md)
+- [SSH](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/ssh-protocol.md)
+- [QUIC 包保护](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/quic-protection.md)
+- [算法许可与 policy profile](https://github.com/Celading/jinguisslCore/blob/release/jinguissl-0.8.0-center-20260914/docs/guide/compliance.md)
 
 ## 安全姿态
 

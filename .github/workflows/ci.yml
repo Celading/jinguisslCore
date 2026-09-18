@@ -13,6 +13,8 @@ on:
       - "mr/**"
       - "ci/**"
       - "fix/**"
+      - "feature/**"
+      - "release/**"
   pull_request:
     branches:
       - main
@@ -193,6 +195,29 @@ jobs:
           . "$RUNNER_TEMP/cangjie-env.sh"
           set -o pipefail
           cjpm test 2>&1 | tee target/public-test-evidence/test.log
+
+      - name: Independent DTLS reference interoperability
+        run: |
+          . "$RUNNER_TEMP/cangjie-env.sh"
+          set -o pipefail
+          (cd examples/dtls-peer && cjpm build) 2>&1 | tee target/public-test-evidence/dtls-consumer-build.log
+          python3 scripts/dtls_openssl_interop.py 2>&1 | tee target/public-test-evidence/dtls-openssl.log
+
+      - name: Independent TLCP four-suite dual-role interoperability
+        run: |
+          . "$RUNNER_TEMP/cangjie-env.sh"
+          set -o pipefail
+          reference="$RUNNER_TEMP/tlcp-reference"
+          git init "$reference"
+          git -C "$reference" remote add origin https://github.com/openHiTLS/openHiTLS.git
+          git -C "$reference" fetch --depth=1 origin 586d8aa6e8581a23a202d107e0e2af8087c18829
+          git -C "$reference" checkout --detach FETCH_HEAD
+          bash scripts/tlcp_build_reference.sh "$reference" 2>&1 | tee target/public-test-evidence/tlcp-reference-build.log
+          (cd examples/tlcp-peer && cjpm build -j1) 2>&1 | tee target/public-test-evidence/tlcp-consumer-build.log
+          python3 scripts/tlcp_openhitls_interop.py \
+            --binary examples/tlcp-peer/target/release/bin/main \
+            --reference "$reference/build/tlcp-reference-peer" \
+            --openssl openssl 2>&1 | tee target/public-test-evidence/tlcp-openhitls.log
 
       - name: Collect available toolchain diagnostics
         if: ${{ always() }}
