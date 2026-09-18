@@ -28,11 +28,13 @@ artifact 是 CI 证据副本，不是第二套结果数据库。公开结论应�
 | 托管依赖图与 lock | `hosted-graph`、`dependency-lock` | Actions step 日志 | 检查公开依赖可复验性；不代表依赖本身已安全审计 |
 | 能力与文档契约 | capability gate 及其回归测试 | Actions step 日志 | 核对 public API、能力矩阵、README/manual 与限制描述 |
 | 构建 | `cjpm build` | job 状态、`build.log` | 证明该 runner 与工具链能构建 |
-| 单元与协议回归 | `cjpm test` | job 状态、`test.log` | 本次国密完整面收口本地结果为 `529/529`；公开结论仍以对应 commit 的 CI 日志为准 |
+| 单元与协议回归 | `cjpm test` | job 状态、`test.log` | TLCP provider 本地全量为 `786/786`；公开结论仍以对应 commit 的 CI 日志为准 |
 | known-answer vectors | Cangjie 测试套内 RFC/NIST/协议向量 | 计入测试总数 | 尚未逐向量输出统一 ID 清单 |
 | 负向与 fail-closed | Cangjie 测试套内错误密钥、标签、边界、票据与协议负向 | 计入测试总数 | 证明已写入的拒绝路径，不代表穷尽攻击面 |
 | 外部密码向量库 | 尚未接入标准 lane | 无通过声明 | 尚未接入完整 Wycheproof corpus |
-| TLS/SSH/QUIC 外部互操作 | 尚未接入标准 lane | 无通过声明 | 不声明 OpenSSL/BoringSSL/浏览器/curl/OpenSSH/HTTP/3 在线互操作通过 |
+| TLCP 外部互操作 | `tlcp_openhitls_interop.py` | 本地八组；CI 单独上传日志 | 固定 openHiTLS、四套×双角色、双向证书认证和数据；不是 DTLCP/HTTP/2 或认证 |
+| DTLS 外部互操作 | `dtls_openssl_interop.py` | 见对应提交日志 | 指纹认证 DTLS 1.2，不代表 PKIX 或 DTLS 1.3 |
+| TLS/SSH/QUIC 外部互操作 | Core 未接入完整产品标准 lane | 无新增通过声明 | 不声明浏览器/curl/OpenSSH/HTTP/3 产品完成 |
 | fuzz / sanitizer / 故障注入 | 尚未接入标准 lane | 无通过声明 | 普通单元测试不等于模糊测试或内存安全证明 |
 | 恒定时与认证 | 尚未接入标准 lane | 无通过声明 | 不声明 constant-time、FIPS 140、商密或第三方安全认证 |
 | 打包与发布 | 独立 release gate | 不在测试 job 内 | 测试通过不等于 bundle、publish 或注册表消费成功 |
@@ -54,7 +56,8 @@ artifact 是 CI 证据副本，不是第二套结果数据库。公开结论应�
 | DTLCP | `core_dtlcp_test.cj` | epoch/48 位序号、乱序、anti-replay、分片重组、overlap 与 cached-flight backoff |
 
 固定向量可证明已列出的输入输出与边界；它们不替代完整 Wycheproof、fuzz、侧信道评估、
-openHiTLS 在线互操作或第三方认证。
+独立协议互操作或第三方认证；TLCP 独立互通的单独证明见
+[provider 指南](guide/tlcp-provider.md)。
 
 ## 借鉴的大型密码库做法
 

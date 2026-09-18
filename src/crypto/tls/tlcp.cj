@@ -108,18 +108,21 @@ public class TlcpClientHello {
     public let sessionId: Array<Byte>
     public let cipherSuites: Array<TlcpCipherSuite>
     public let extensions: Array<TlsExtension>
+    public let secureRenegotiation: Bool
 
     public init(
         random: Array<Byte>,
         cipherSuites: Array<TlcpCipherSuite>,
         sessionId!: Array<Byte> = [],
-        extensions!: Array<TlsExtension> = []
+        extensions!: Array<TlsExtension> = [],
+        secureRenegotiation!: Bool = false
     ) {
         tlcpRequireHelloFields(random, sessionId, cipherSuites)
         this.random = random.clone()
         this.sessionId = sessionId.clone()
         this.cipherSuites = cipherSuites.clone()
         this.extensions = extensions.clone()
+        this.secureRenegotiation = secureRenegotiation
     }
 }
 
@@ -181,6 +184,7 @@ public func tlcpEncodeClientHello(hello: TlcpClientHello): Array<Byte> {
     for (suite in hello.cipherSuites) {
         tlcpAppend(suites, tlcpEncodeUInt16(suite.wireValue()))
     }
+    if (hello.secureRenegotiation) { tlcpAppend(suites, tlcpEncodeUInt16(0x00ff)) }
     tlcpAppend(body, tlcpEncodeVector16(suites.toArray(), "TLCP cipher suites"))
     body.add(UInt8(1))
     body.add(UInt8(0))
@@ -209,9 +213,14 @@ public func tlcpDecodeClientHello(encoded: Array<Byte>): TlcpClientHello {
         throw CryptoException(ParseError, "TLCP cipher suite vector is invalid")
     }
     let suites = ArrayList<TlcpCipherSuite>()
+    var secureRenegotiation = false
     var suiteOffset: Int64 = 0
     while (suiteOffset < suiteBytes.size) {
-        suites.add(tlcpCipherSuiteFromWire(tlcpDecodeUInt16(suiteBytes, suiteOffset)))
+        let wire = tlcpDecodeUInt16(suiteBytes, suiteOffset)
+        if (wire == 0x00ff) { secureRenegotiation = true }
+        else if (wire == 0xe011 || wire == 0xe013 || wire == 0xe051 || wire == 0xe053) {
+            suites.add(tlcpCipherSuiteFromWire(wire))
+        }
         suiteOffset += 2
     }
     if (offset >= body.size) {
@@ -231,7 +240,9 @@ public func tlcpDecodeClientHello(encoded: Array<Byte>): TlcpClientHello {
     }
     offset += compressionLen
     let extensions = tlcpDecodeOptionalExtensions(body, offset, "TLCP ClientHello")
-    TlcpClientHello(random, suites.toArray(), sessionId: sessionId, extensions: extensions)
+    if (suites.size == 0) { throw CryptoException(Unsupported, "ClientHello offers no supported TLCP cipher suite") }
+    TlcpClientHello(random, suites.toArray(), sessionId: sessionId, extensions: extensions,
+        secureRenegotiation: secureRenegotiation)
 }
 
 public func tlcpEncodeServerHello(hello: TlcpServerHello): Array<Byte> {
@@ -461,18 +472,23 @@ public func tlcpParseAndVerifyEcdheServerKeyExchange(
 
 public func tlcpBuildEcdheClientKeyExchange(ephemeralPublicKey: Sm2PublicKey): Array<Byte> {
     let point = sm2PublicKeyToUncompressed(ephemeralPublicKey)
-    let body = Array<Byte>(1 + point.size, repeat: UInt8(0))
-    body[0] = UInt8(point.size)
-    secureCopyInto(point, body, dstOffset: 1)
+    // TLCP carries named-curve parameters on the client side as well.
+    let body = Array<Byte>(4 + point.size, repeat: UInt8(0))
+    body[0] = UInt8(3)
+    body[1] = UInt8(0)
+    body[2] = UInt8(TLCP_SM2_NAMED_GROUP)
+    body[3] = UInt8(point.size)
+    secureCopyInto(point, body, dstOffset: 4)
     tlcpEncodeHandshake(UInt8(0x10), body)
 }
 
 public func tlcpParseEcdheClientKeyExchange(encoded: Array<Byte>): Sm2PublicKey {
     let body = tlcpDecodeHandshake(encoded, UInt8(0x10), "TLCP ECDHE ClientKeyExchange")
-    if (body.size != 66 || UInt8(body[0]) != UInt8(65)) {
-        throw CryptoException(ParseError, "TLCP ECDHE ClientKeyExchange point length is invalid")
+    if (body.size != 69 || body[0] != UInt8(3) ||
+        tlcpDecodeUInt16(body, 1) != TLCP_SM2_NAMED_GROUP || body[3] != UInt8(65)) {
+        throw CryptoException(ParseError, "TLCP ECDHE ClientKeyExchange curve/point encoding is invalid")
     }
-    sm2PublicKeyFromUncompressed(body[1..])
+    sm2PublicKeyFromUncompressed(body[4..])
 }
 
 /** Build static ECC ClientKeyExchange with ASN.1 SM2Cipher interoperability encoding. */
@@ -526,7 +542,8 @@ public func tlcpDeriveEcdheClientSecrets(
     if (!cipherSuite.usesEcdhe()) {
         throw CryptoException(InvalidArgument, "TLCP ECDHE derivation requires an ECDHE suite")
     }
-    let exchange = sm2InitiatorKeyExchange(
+    // TLCP's server is the SM2 exchange initiator; the client is the responder.
+    let exchange = sm2ResponderKeyExchange(
         clientStaticPrivateKey,
         clientEphemeralPrivateKey,
         serverStaticPublicKey,
@@ -535,7 +552,8 @@ public func tlcpDeriveEcdheClientSecrets(
         serverIdentity,
         TLCP_PREMASTER_SECRET_LEN
     )
-    tlcpDeriveSecretsFromPreMaster(exchange.key, clientRandom, serverRandom, cipherSuite)
+    try { tlcpDeriveSecretsFromPreMaster(exchange.key, clientRandom, serverRandom, cipherSuite) }
+    finally { tlcpWipe(exchange.key); tlcpWipe(exchange.sendConfirmation); tlcpWipe(exchange.expectedPeerConfirmation) }
 }
 
 public func tlcpDeriveEcdheServerSecrets(
@@ -552,7 +570,7 @@ public func tlcpDeriveEcdheServerSecrets(
     if (!cipherSuite.usesEcdhe()) {
         throw CryptoException(InvalidArgument, "TLCP ECDHE derivation requires an ECDHE suite")
     }
-    let exchange = sm2ResponderKeyExchange(
+    let exchange = sm2InitiatorKeyExchange(
         serverStaticPrivateKey,
         serverEphemeralPrivateKey,
         clientStaticPublicKey,
@@ -561,7 +579,8 @@ public func tlcpDeriveEcdheServerSecrets(
         clientIdentity,
         TLCP_PREMASTER_SECRET_LEN
     )
-    tlcpDeriveSecretsFromPreMaster(exchange.key, clientRandom, serverRandom, cipherSuite)
+    try { tlcpDeriveSecretsFromPreMaster(exchange.key, clientRandom, serverRandom, cipherSuite) }
+    finally { tlcpWipe(exchange.key); tlcpWipe(exchange.sendConfirmation); tlcpWipe(exchange.expectedPeerConfirmation) }
 }
 
 public func tlcpPrfSm3(
@@ -719,7 +738,7 @@ private func tlcpRequireHelloFields(
     }
 }
 
-private func tlcpSelectCipherSuite(
+func tlcpSelectCipherSuite(
     offered: Array<TlcpCipherSuite>, supported: Array<TlcpCipherSuite>
 ): TlcpCipherSuite {
     if (supported.size == 0) {
@@ -803,7 +822,7 @@ private func tlcpRequireRandoms(clientRandom: Array<Byte>, serverRandom: Array<B
     }
 }
 
-private func tlcpRequireCertificateUsage(
+func tlcpRequireCertificateUsage(
     certificate: X509Certificate, allowedMask: Int64, label: String
 ): Unit {
     let extension = x509FindExtension(certificate, X509_OID_KEY_USAGE)
@@ -902,11 +921,11 @@ private func tlcpDecodeSm2CiphertextDer(der: Array<Byte>): Array<Byte> {
     output.toArray()
 }
 
-private func tlcpEncodeSm2SignatureDer(r: BigNum, s: BigNum): Array<Byte> {
+func tlcpEncodeSm2SignatureDer(r: BigNum, s: BigNum): Array<Byte> {
     tlcpDerWrap(UInt8(0x30), tlcpConcat(tlcpDerInteger(r.toBytesBE()), tlcpDerInteger(s.toBytesBE())))
 }
 
-private func tlcpDecodeSm2SignatureDer(der: Array<Byte>): (BigNum, BigNum) {
+func tlcpDecodeSm2SignatureDer(der: Array<Byte>): (BigNum, BigNum) {
     let (tag, value, end) = tlcpDerRead(der, 0, "SM2 signature")
     if (tag != UInt8(0x30) || end != der.size) {
         throw CryptoException(ParseError, "SM2 signature DER root is invalid")

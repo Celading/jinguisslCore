@@ -40,7 +40,7 @@ EMS 与 SRTP exporter；OpenSSL 双角色/双 profile 本机互操作通过。
 | 大数 | BigNum 与大数兼容层 | 依赖标准库 BigInt，不是恒定时间大数后端 |
 | 证书 | X.509 / PEM / trust material | 解析、链验证与显式信任材料；非完整 WebPKI/原生系统信任库 |
 | TLS | TLS 1.2 / TLS 1.3 握手构件、record、session、RFC 8998 国密 profile 与 ClientHello profile；TLS 1.3 AES-GCM/ChaCha20-Poly1305 record 使用序列化 5 字节 header 作为 AAD | 独立 AEAD 复算与本地协议流测试，不等于浏览器/OpenSSL/curl 在线互操作 |
-| 国密传输协议 | TLCP / DTLCP 1.1：四套 SM2/SM3/SM4 密码组、双证书、静态 ECC/SM2 ECDHE、CBC/GCM record、数据报 replay/分片/重传构件 | 固定 openHiTLS 语义的库内端到端闭环；不声明外部线上互操作或网络产品完成 |
+| 国密传输协议 | TLCP / DTLCP 1.1：TLCP 四套密码组、owned session、双证书认证；DTLCP replay/分片/重传构件 | TLCP 对固定 openHiTLS 双角色×四套八组互通；实验性、无认证、DTLCP 仅本地构件 |
 | SSH | SSH transport helpers、X25519 KEX、packet protection 与 host verification | OpenSSH 10.0p1 三种 AEAD 固定分组差分；无完整登录流程互操作声明 |
 | QUIC | QUIC v1/v2 Initial、显式 AEAD、Header Protection、Retry integrity | 包保护构件，不包含 QUIC transport 或 HTTP/3 |
 | 策略 | FIPS-oriented policy profile 与算法许可检查 | 策略辅助，不构成 FIPS 140 模块认证 |
