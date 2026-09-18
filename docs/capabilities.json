@@ -24,6 +24,18 @@
   ],
   "capabilities": [
     {
+      "id": "extended-crypto",
+      "label": "BLAKE2s and extended-nonce ChaCha",
+      "status": "implemented-local-test",
+      "summary": "纯仓颉BLAKE2s（keyed/原生短摘要/增量）、HChaCha20与XChaCha20-Poly1305。",
+      "proof": "RFC/draft及独立hashlib向量，分块边界、失败/销毁和篡改测试。",
+      "limits": "无WireGuard协议、认证或完整恒定时间声明；XChaCha按固定草案实现。",
+      "sourceGlobs": ["src/crypto/digest/blake2s.cj"],
+      "testGlobs": ["src/tests/core_extended_crypto_test.cj"],
+      "readmeTokens": ["BLAKE2s", "XChaCha20"],
+      "manualPages": ["docs/guide/extended-crypto.md"]
+    },
+    {
       "id": "dtls12-association",
       "label": "DTLS 1.2 fingerprint-authenticated association",
       "status": "implemented-local-test",

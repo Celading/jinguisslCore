@@ -57,6 +57,11 @@ KEX 初始化消息。
 
 SSH 传输层包保护。
 
+`readPrefixLength` 给出当前模式需要的首块长度；`encodedPacketSize(prefix, maximum: 262144)`
+在不推进序号或 CTR 状态的前提下检查有界分帧长度。该长度尚未认证，只能用于有界收包；
+只有完整 `open` 成功后才能交付载荷。异常使读取状态终止。默认上限含长度字段和 MAC/tag，
+调用方可选择 16..1048576 的限制。主桥另提供拥有缓存与失败状态的流式入口。
+
 ### SshDerivedSessionKeys / SshDirectionKeyMaterial
 
 导出的 SSH 会话密钥材料。
