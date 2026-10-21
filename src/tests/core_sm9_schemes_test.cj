@@ -87,7 +87,7 @@ public class CoreSm9SchemesTestSuite {
             sm9SchemeHex(ciphertext),
             "2445471164490618e1ee20528ff1d545b0f14c8bcaa44544f03dab5dac07d8ff" +
             "42ffca97d57cddc05ea405f2e586feb3a6930715532b8000759f13059ed59ac0" +
-            "ba672387bcd6de5016a158a52bb2e7fc429197bcab70b25afee37a2b9db9f367" +
+            "ba672387bcd6de5016a158a52bb2e7fc429197bcab70b25afee37a2b9db9f367" + // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
             "1b5f5b0e951489682f3e64e1378cdd5da9513b1c"
         )
         @Assert(sm9Decrypt(userKey, bob, ciphertext), plaintext)

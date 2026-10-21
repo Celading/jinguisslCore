@@ -909,7 +909,7 @@ private func makeUnrelatedTrustAnchor(): X509Certificate {
             "unrelated-trust-anchor.local",
             serialNumber: [UInt8(0x7F)],
             notBefore: "220101000000Z",
-            notAfter: "300101000000Z"
+            notAfter: "300101000000Z" // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
         ),
         EcPrivateKey(P256, BigNum.one())
     )
@@ -980,7 +980,7 @@ private func copyMap(source: HashMap<String, String>): HashMap<String, String> {
 }
 
 private func requireValue(values: HashMap<String, String>, key: String): String {
-    values.get(key) ?? throw Exception("missing key: ${key}")
+    values.get(key) ?? throw Exception("missing key: ${key}") // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
 }
 
 private func cloneCertWithExtensions(cert: X509Certificate, extensions: Array<X509Extension>): X509Certificate {

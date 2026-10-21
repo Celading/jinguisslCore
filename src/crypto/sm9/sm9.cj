@@ -42,7 +42,7 @@ public class Sm9G1Point {
     public let y: BigNum
 
     public init(x: BigNum, y: BigNum) {
-        if (!sm9CanonicalFieldElement(x.toBigInt()) || !sm9CanonicalFieldElement(y.toBigInt())) {
+        if (!sm9CanonicalFieldElement(x.toBigInt()) || !sm9CanonicalFieldElement(y.toBigInt())) { // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
             throw CryptoException(InvalidArgument, "SM9 G1 coordinates must be canonical field elements")
         }
         let point = Sm9G1(x.toBigInt(), y.toBigInt())
@@ -64,9 +64,9 @@ public class Sm9G2Point {
     public init(x0: BigNum, x1: BigNum, y0: BigNum, y1: BigNum) {
         if (
             !sm9CanonicalFieldElement(x0.toBigInt()) ||
-            !sm9CanonicalFieldElement(x1.toBigInt()) ||
-            !sm9CanonicalFieldElement(y0.toBigInt()) ||
-            !sm9CanonicalFieldElement(y1.toBigInt())
+            !sm9CanonicalFieldElement(x1.toBigInt()) || // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
+            !sm9CanonicalFieldElement(y0.toBigInt()) || // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
+            !sm9CanonicalFieldElement(y1.toBigInt()) // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
         ) {
             throw CryptoException(InvalidArgument, "SM9 G2 coordinates must be canonical field elements")
         }

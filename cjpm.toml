@@ -1,6 +1,6 @@
 [package]
   cjc-version = "1.0.0"
-  version = "0.9.0"
+  version = "0.9.1"
   name = "jinguissl_core"
   output-type = "static"
   src-dir = "src"

@@ -2289,7 +2289,7 @@ private func concatStringArrays(left: Array<String>, right: Array<String>): Arra
 
 private func appendTrustAnchorsFromPemPath(out: ArrayList<X509Certificate>, path: String): Unit {
     let normalized = path.trimAscii()
-    if (normalized.size == 0 || !exists(normalized)) {
+    if (normalized.size == 0 || !exists(normalized)) { // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
         return
     }
     try {

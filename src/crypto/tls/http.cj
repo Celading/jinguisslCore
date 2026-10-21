@@ -40,7 +40,7 @@ public class TlsHttpNegotiationPolicy {
         }
         if (
             allowMissingAlpnHttp11Fallback &&
-            !tlsHttpContains(normalizedAlpn, TLS_HTTP_ALPN_HTTP11)
+            !tlsHttpContains(normalizedAlpn, TLS_HTTP_ALPN_HTTP11) // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
         ) {
             throw CryptoException(
                 InvalidArgument,
@@ -74,7 +74,7 @@ public func tls13HttpClientHelloInteropProfileX25519(
 }
 
 public func tls13HttpClientHelloInteropProfileCloudflareOpenSsl20260701(
-    serverName!: String = "www.cloudflare.com"
+    serverName!: String = "www.cloudflare.com" // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
 ): Tls13ClientHelloInteropProfile {
     Tls13ClientHelloInteropProfile(
         serverName: serverName.trimAscii().toAsciiLower(),

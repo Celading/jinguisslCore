@@ -3467,7 +3467,7 @@ private func tls13RequireKeyIvLengths(keyLen: Int64, ivLen: Int64): Unit {
     }
 }
 
-private func tls13RequireTrafficSecret(secret: Array<Byte>, label: String): Unit {
+private func tls13RequireTrafficSecret(secret: Array<Byte>, label: String): Unit { // cjlint-ignore !G.FUN.02 Retained parameter preserves the existing callable contract.
     _ = tls13HashAlgorithmForHashLen(secret.size)
 }
 

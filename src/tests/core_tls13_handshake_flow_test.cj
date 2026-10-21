@@ -1856,10 +1856,10 @@ public class Tls13HandshakeFlowTestSuite {
     public func testTls13HttpClientHelloInteropCloudflareOpenSslBaselineGap(): Unit {
         let x25519Private = hexToBytes("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
         let x25519Public = x25519PublicFromPrivate(x25519Private)
-        let x25519Hello = tls13BuildHttpClientHelloX25519(x25519Public, "www.cloudflare.com")
+        let x25519Hello = tls13BuildHttpClientHelloX25519(x25519Public, "www.cloudflare.com") // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
         let profile = tls13HttpClientHelloInteropProfileCloudflareOpenSsl20260701()
 
-        @Assert(profile.serverName, "www.cloudflare.com")
+        @Assert(profile.serverName, "www.cloudflare.com") // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
         @Assert(profile.alpnProtocols, ["h2", "http/1.1"])
         @Assert(tls13TestContainsInt64(profile.cipherSuites, TLS13_CIPHER_SUITE_AES_256_GCM_SHA384_TEST), true)
         @Assert(tls13TestContainsInt64(profile.supportedGroups, TLS13_GROUP_X25519_MLKEM768_TEST), true)

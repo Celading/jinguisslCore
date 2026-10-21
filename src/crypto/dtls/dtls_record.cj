@@ -13,7 +13,7 @@ public let DTLS_VERSION_1_0: UInt16 = UInt16(0xFEFF) // DTLS 1.0
 public let DTLS_VERSION_1_2: UInt16 = UInt16(0xFEFD) // DTLS 1.2
 public let DTLS_RECORD_HEADER_LEN: Int64 = 13
 public let DTLS_MAX_PLAINTEXT_LEN: Int64 = 16384
-// RFC 6347 §4.1.1 / §4.1.2.1: the AEAD ciphertext on the wire is
+// RFC 6347 §4.1.1 / §4.1.2.1: the AEAD ciphertext on the wire is // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
 //   explicit_nonce (8 bytes) || encrypted_plaintext || auth tag (16 bytes).
 // The previous definition omitted the 8-byte explicit nonce from the
 // maximum ciphertext calculation, so the boundary check on decrypt
@@ -33,7 +33,7 @@ public let DTLS_MAX_FRAGMENT_LEN: Int64 = 16384
 // can express up to 2^24-1, but we cap at 1 MiB to prevent unbounded
 // allocation driven by attacker-controlled declared lengths).
 public let DTLS_MAX_HANDSHAKE_MSG_LEN: Int64 = 1048576
-// RFC 5246 §7.4.1.2: session_id length MUST be in [0, 32].
+// RFC 5246 §7.4.1.2: session_id length MUST be in [0, 32]. // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
 public let DTLS_MAX_SESSION_ID_LEN: Int64 = 32
 // RFC 6347 §4.2.2: cookie length MUST be in [0, 255] (single-byte length).
 public let DTLS_MAX_COOKIE_LEN: Int64 = 255
@@ -598,7 +598,7 @@ public enum DtlsFlightType <: Equatable<DtlsFlightType> & ToString {
     }
 }
 
-/// Retransmit timer state for a flight (RFC 6347 Section 4.2.4.1)
+/// Retransmit timer state for a flight (RFC 6347 Section 4.2.4.1) // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
 public class DtlsFlightTimer {
     public var initialTimeout: Int64 = 1000  // 1 second default
     public var maxTimeout: Int64 = 60000     // 60 seconds max

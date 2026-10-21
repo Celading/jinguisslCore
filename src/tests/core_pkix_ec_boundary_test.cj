@@ -21,7 +21,7 @@ private func boundaryCertWithExtensions(cert: X509Certificate, extensions: Array
 public class CorePkixEcBoundaryTestSuite {
     @TestCase
     public func testPkcs8InheritsPrivateScalarDomain(): Unit {
-        let prefix = BigNum.fromHex("3041020100301306072A8648CE3D020106082A8648CE3D030107042730250201010420").toBytesBE()
+        let prefix = BigNum.fromHex("3041020100301306072A8648CE3D020106082A8648CE3D030107042730250201010420").toBytesBE() // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
         let n = BigNum.fromHex("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551")
         for (scalar in [n, n.add(BigNum.one())]) {
             let bytes = ArrayList<Byte>()
@@ -98,8 +98,8 @@ public class CorePkixEcBoundaryTestSuite {
                 let extensions = ArrayList<X509Extension>()
                 for (ext in original.extensions) { extensions.add(ext) }
                 match (kind) {
-                    case 0 => extensions.add(X509Extension("1.2.3.4.5", true, [UInt8(5), 0]))
-                    case 1 => extensions.add(X509Extension("2.5.29.30", true, [UInt8(0x30), 0]))
+                    case 0 => extensions.add(X509Extension("1.2.3.4.5", true, [UInt8(5), 0])) // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
+                    case 1 => extensions.add(X509Extension("2.5.29.30", true, [UInt8(0x30), 0])) // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
                     case _ => extensions.add(original.extensions[0])
                 }
                 let changed = boundaryCertWithExtensions(original, extensions.toArray())
@@ -123,7 +123,7 @@ public class CorePkixEcBoundaryTestSuite {
         let root = x509ParsePem(readToString("testdata/x509/policy_root.pem"))
         let extensions = ArrayList<X509Extension>()
         for (ext in leaf.extensions) { extensions.add(ext) }
-        extensions.add(X509Extension("1.2.3.4.5", false, [UInt8(5), 0]))
+        extensions.add(X509Extension("1.2.3.4.5", false, [UInt8(5), 0])) // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
         _ = x509VerifyCertificateChain(boundaryCertWithExtensions(leaf, extensions.toArray()),
             X509VerificationPolicy([root], intermediates: [inter]))
     }

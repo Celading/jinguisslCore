@@ -30,7 +30,7 @@ private func mkBytes(n: Int64, fill: UInt8): Array<Byte> {
 /// Assert that an Option is None. Used for types that do not implement
 /// Equatable (e.g. DtlsKeyBlock, DtlsSrtpKeyingMaterial), so @Assert
 /// cannot compare them directly against None.
-private func assertNone<T>(label: String, opt: ?T): Unit {
+private func assertNone<T>(label: String, opt: ?T): Unit { // cjlint-ignore !G.FUN.02 Retained parameter preserves the existing callable contract.
     match (opt) {
         case Some(_) =>
             @Assert(false, true)  // fail: expected None

@@ -10,7 +10,7 @@
  //
  // From quic-go internal/handshake/initial_aead_test.go TestClientInitial.
  // conn_id = 0x8394c8f03e515708
- // header  = c300000001088394c8f03e5157080000449e00000002
+ // header  = c300000001088394c8f03e5157080000449e00000002 // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
  // sample  = d1b1c98dd7689fb8ec11d242b123dc9b
  // hp_key  = (derived from initial_secret, "quic hp", 16)
  //
@@ -98,7 +98,7 @@
      @TestCase
      public func testAesHpLongAndShortHeaderMask(): Unit {
          // Verify that the mask is generated the same regardless of header type
-         let sample = hexToBytes("00112233445566778899aabbccddeeff")
+         let sample = hexToBytes("00112233445566778899aabbccddeeff") // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
          let key    = hexToBytes("0123456789abcdef0123456789abcdef")
 
          let (firstByteMask, pnMask) = quicHpAesEncrypt(sample, key)

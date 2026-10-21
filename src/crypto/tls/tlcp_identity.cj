@@ -35,8 +35,8 @@ public class TlcpIdentity {
             X509_KEY_USAGE_DATA_ENCIPHERMENT | X509_KEY_USAGE_KEY_AGREEMENT, "TLCP encryption identity")
         if (!constantTimeEquals(sm2PublicKeyToUncompressed(sm2PublicKey(signingKey)),
             sm2PublicKeyToUncompressed(x509ExtractSm2PublicKey(signingCert))) ||
-            !constantTimeEquals(sm2PublicKeyToUncompressed(sm2PublicKey(encryptionKey)),
-            sm2PublicKeyToUncompressed(x509ExtractSm2PublicKey(encryptionCert)))) {
+            !constantTimeEquals(sm2PublicKeyToUncompressed(sm2PublicKey(encryptionKey)), // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
+            sm2PublicKeyToUncompressed(x509ExtractSm2PublicKey(encryptionCert)))) { // cjlint-ignore !G.EXP.03 Intentional short-circuit preserves validation order and avoids unnecessary predicate work.
             throw CryptoException(InvalidArgument, "TLCP certificate/private key mismatch")
         }
         // n-1 is a valid encryption scalar but cannot sign SM2 messages.

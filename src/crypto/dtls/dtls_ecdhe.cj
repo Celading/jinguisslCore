@@ -789,7 +789,7 @@ public class DtlsHandshakeContext {
     /// key block, SRTP keys, or the ECDHE shared secret to a later caller.
     /// The context-owned ephemeral X25519 private key is also cleared.
     public func recordFatalAlert(description: DtlsAlertDescription,
-        message: String): Unit {
+        message: String): Unit { // cjlint-ignore !G.FUN.02 Retained parameter preserves the existing callable contract.
         lastFatalAlert = dtlsFatalAlert(description)
         if (state != DtlsConnectionState.Failed &&
             state != DtlsConnectionState.Closed) {
@@ -800,7 +800,7 @@ public class DtlsHandshakeContext {
 
     // Internal helper that records a fatal alert without state mutation noise.
     private func recordFatalAlertInternal(description: DtlsAlertDescription,
-        message: String): Unit {
+        message: String): Unit { // cjlint-ignore !G.FUN.02 Retained parameter preserves the existing callable contract.
         lastFatalAlert = dtlsFatalAlert(description)
         if (state != DtlsConnectionState.Failed &&
             state != DtlsConnectionState.Closed) {

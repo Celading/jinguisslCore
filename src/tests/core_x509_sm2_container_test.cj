@@ -12,19 +12,19 @@ public class X509Sm2ContainerTestSuite {
         // Apache-2.0 openHiTLS fixture set, pinned at 26f152c627b6b429a73973f762c8b71bb582fa23:
         // testcode/testdata/cert/asn1/sm2_pkcs8/{sm2_pkcs8,sm2_pkcs1,sm2pub_pkcs1}.der
         let pkcs8 = gmHexToBytes(
-            "308187020100301306072a8648ce3d020106082a811ccf5501822d046d306b0201010420" +
+            "308187020100301306072a8648ce3d020106082a811ccf5501822d046d306b0201010420" + // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
             "c5983f142e49d2e2f2c55e216ac7a32803df0a0c5eb5134238e16204579cbea0a14403" +
             "420004a6a52df225c7064b5daf8defb3902e24e80a090abd1f74d60556f924bef62cd80" +
             "83d73107eae27bed467ed642c2781643ad0f557d089930503cbd1ab36584371"
         )
         let sec1 = gmHexToBytes(
-            "30770201010420c5983f142e49d2e2f2c55e216ac7a32803df0a0c5eb5134238e16204" +
+            "30770201010420c5983f142e49d2e2f2c55e216ac7a32803df0a0c5eb5134238e16204" + // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
             "579cbea0a00a06082a811ccf5501822da14403420004a6a52df225c7064b5daf8defb39" +
             "02e24e80a090abd1f74d60556f924bef62cd8083d73107eae27bed467ed642c2781643a" +
             "d0f557d089930503cbd1ab36584371"
         )
         let spki = gmHexToBytes(
-            "3059301306072a8648ce3d020106082a811ccf5501822d03420004a6a52df225c7064b5" +
+            "3059301306072a8648ce3d020106082a811ccf5501822d03420004a6a52df225c7064b5" + // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
             "daf8defb3902e24e80a090abd1f74d60556f924bef62cd8083d73107eae27bed467ed64" +
             "2c2781643ad0f557d089930503cbd1ab36584371"
         )
@@ -159,7 +159,7 @@ public class X509Sm2ContainerTestSuite {
                 "gm-leaf.example",
                 serialNumber: [UInt8(0x20), UInt8(0x01)],
                 notBefore: "260101000000Z",
-                notAfter: "300101000000Z",
+                notAfter: "300101000000Z", // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
                 keyUsageMask: X509_KEY_USAGE_DIGITAL_SIGNATURE
             ),
             sm2PublicKey(leafPrivate),

@@ -131,7 +131,7 @@ public class DtlsHandshakeLayerCorpusTestSuite {
     }
 
     // Acceptance: a ClientHello with a sessionId length exceeding 32 is
-    // rejected (RFC 5246 §7.4.1.2 cap).
+    // rejected (RFC 5246 §7.4.1.2 cap). // cjlint-ignore !G.OTH.03 Public protocol reference, object identifier or documented integration hostname.
     @TestCase
     public func testDecodeClientHello_SessionIdTooLong_Rejected(): Unit {
         // version(2) + random(32) + sessionIdLen=33

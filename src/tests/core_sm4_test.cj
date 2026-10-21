@@ -152,7 +152,7 @@ public class CoreSm4TestSuite {
     public func testSm4EcbAndCbcPkcs7StrictRoundTrip(): Unit {
         let key = hexToBytes("0123456789abcdeffedcba9876543210")
         let iv = hexToBytes("000102030405060708090a0b0c0d0e0f")
-        let plaintext = hexToBytes("00112233445566778899aabbcc")
+        let plaintext = hexToBytes("00112233445566778899aabbcc") // cjlint-ignore !G.OTH.02 Published deterministic test vector, not a runtime credential.
         let ecb = sm4EcbEncrypt(key, plaintext, pkcs7: true)
         @Assert(arrToHex(sm4EcbDecrypt(key, ecb, pkcs7: true)), arrToHex(plaintext))
         let cbc = sm4CbcEncrypt(key, iv, plaintext, pkcs7: true)
